@@ -1913,7 +1913,7 @@ function loadSchools() {
   if (window.SCHOOLS) return Promise.resolve(window.SCHOOLS);
   return new Promise((ok, fail) => {
     const s = document.createElement('script');
-    s.src = 'schools.js';
+    s.src = 'schools.js' + (window.ASSET_V ? '?v=' + window.ASSET_V : '');
     s.onload = () => (window.SCHOOLS ? ok(window.SCHOOLS) : fail());
     s.onerror = fail;
     document.head.appendChild(s);

@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>學習小冒險：英文・國語・社會・自然・數學</title>
-  <meta name="description" content="國小到高中的學習網站：英文（聽力、積木拼句、AI 對話、英檢）、國語、社會、自然、數學，學校老師也能建立專屬題庫。">
+  <title>學習小冒險：英文・國語・社會・自然・數學・程式</title>
+  <meta name="description" content="國小到高中的學習網站：英文（聽力、積木拼句、AI 對話、英檢）、國語、社會、自然、數學、程式（線上寫 Python），學校老師也能建立專屬題庫。">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261117193435">
 </head>
 <body>
   <header class="site-head">
@@ -19,15 +19,17 @@
     </div>
   </header>
   <main id="app"></main>
-  <script src="data.js"></script>
-  <script src="levels.js"></script>
-  <script src="gept.js"></script>
-  <script src="subjects.js"></script>
-  <script src="knowledge.js"></script>
-  <script src="figures.js"></script>
-  <script src="school-banks.js"></script>
+  <!-- 版本號：每次更新網站時自動改變（tools/bump-version.mjs），避免瀏覽器用到舊檔案 -->
+  <script>window.ASSET_V = '20261117193435';</script>
+  <script src="data.js?v=20261117193435"></script>
+  <script src="levels.js?v=20261117193435"></script>
+  <script src="gept.js?v=20261117193435"></script>
+  <script src="subjects.js?v=20261117193435"></script>
+  <script src="knowledge.js?v=20261117193435"></script>
+  <script src="figures.js?v=20261117193435"></script>
+  <script src="school-banks.js?v=20261117193435"></script>
   <!-- 高清語音錄音清單（由 tools/make-audio.mjs 產生；沒有這個檔案也能正常使用） -->
-  <script src="audio/manifest.js"></script>
-  <script src="app.js"></script>
+  <script src="audio/manifest.js?v=20261117193435"></script>
+  <script src="app.js?v=20261117193435"></script>
 </body>
 </html>
