@@ -625,3 +625,9 @@ body {
 .ans-row .badge { grid-column: 2; grid-row: 1 / span 2; background: var(--purple-l); color: #5f3dc4; }
 .ans-tip { background: var(--yellow-l); border-left: 4px solid var(--yellow); padding: 6px 10px; border-radius: 6px; margin-top: 8px; }
 @media (max-width: 640px) { .topic { flex-direction: column; align-items: stretch; } .ask-box { flex-direction: column; } .who-btn { font-size: 14px; } }
+
+/* ---------- 答案旁的朗讀＋慢速 ---------- */
+.say-mini { display: inline-flex; gap: 4px; vertical-align: middle; }
+.mini.slow { background: var(--green-l); border-color: #96f2d7; color: #087f5b; font-weight: 700; }
+.ex-item { display: inline-flex; align-items: center; gap: 4px; background: #fff; border-radius: 99px; padding: 2px 6px 2px 2px; }
+.feedback .say-mini { margin-left: 4px; }
