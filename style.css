@@ -565,3 +565,22 @@ body {
 .feedback.ok { border: 2px solid #8ce99a; }
 .feedback.bad { border: 2px solid #ffa8a8; }
 .tip { color: #5f3dc4; }
+
+/* ---------- 學習階段選擇（國小／國中／高中／大學） ---------- */
+.levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0 4px; }
+.lv { border: 3px solid #e5dbff; background: #fff; border-radius: 16px; padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; box-shadow: 0 4px 0 #e5dbff; transition: transform .12s; }
+.lv b { font-size: 20px; color: #5f3dc4; }
+.lv small { font-size: 12px; color: var(--muted); text-align: center; }
+.lv:hover { transform: translateY(-2px); }
+.lv:nth-child(1).on { background: var(--red); border-color: var(--red); box-shadow: 0 4px 0 #e03131; }
+.lv:nth-child(2).on { background: var(--orange); border-color: var(--orange); box-shadow: 0 4px 0 #e8590c; }
+.lv:nth-child(3).on { background: var(--purple); border-color: var(--purple); box-shadow: 0 4px 0 #6741d9; }
+.lv:nth-child(4).on { background: var(--blue); border-color: var(--blue); box-shadow: 0 4px 0 #1c7ed6; }
+.lv.on b, .lv.on small { color: #fff; }
+.grade .gi.sm { font-size: 18px; }
+/* 沒有圖片的單字（國高中、大學的抽象字）：只顯示中文 */
+.big-emo:empty, .word-card .emo:empty { display: none; }
+.opt .emo:empty { display: none; }
+.opt .emo:empty + small { font-size: 19px; color: var(--ink); font-weight: 700; }
+.m-card .emo:empty { display: none; }
+@media (max-width: 640px) { .levels { grid-template-columns: repeat(2, 1fr); } }

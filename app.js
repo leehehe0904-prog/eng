@@ -24,8 +24,8 @@ for (const g of Object.values(GRADES)) {
   g.W = g.words.map(([en, zh, emoji]) => ({ en, zh, emoji }));
   g.S = g.sentences.map(([en, zh]) => ({ en, zh }));
 }
-const GRADE_KEYS = Object.keys(GRADES).filter(k => /^\d+$/.test(k));
-const ALL_WORDS = GRADE_KEYS.flatMap(k => GRADES[k].W);
+const GRADE_KEYS = Object.keys(GRADES).filter(k => k !== 'gept');
+const ALL_WORDS = GRADE_KEYS.filter(k => GRADES[k].level === 'elem').flatMap(k => GRADES[k].W);
 
 /* ---------- 語音朗讀 ----------
    1. 優先播放預先產生的高清錄音（audio/*.mp3，由 tools/make-audio.mjs 產生）
@@ -623,7 +623,8 @@ const Q = {
     label: '聽音選圖',
     make(c) { if (c.words.length < 4) return null; const a = pickW(c, c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">聽一聽，選出正確的圖</p>${sayBtns(q.a.en)}${optButtons(q.opts.map(o => `<span class="emo">${o.emoji}</span><small>${esc(o.zh)}</small>`), 'pics')}`;
+      const pics = q.opts.every(o => o.emoji);   // 只要有一個沒圖，就全部只顯示中文，避免洩漏答案
+      el.innerHTML = `<p class="ask">聽一聽，選出正確的${pics ? '圖' : '意思'}</p>${sayBtns(q.a.en)}${optButtons(q.opts.map(o => `<span class="emo">${pics ? o.emoji : ''}</span><small>${esc(o.zh)}</small>`), 'pics')}`;
       setTimeout(() => speak(q.a.en), 350);
       bindOpts(el, q.opts.indexOf(q.a), done, wrev(q.a));
     },
@@ -711,7 +712,7 @@ const Q = {
   },
   sentenceBlocks: {
     label: '句子積木',
-    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pickS(c, ss); return { key: s.en, s }; },
+    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 12; }); if (!ss.length) return null; const s = pickS(c, ss); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">把積木排成正確的句子</p><div class="zh-big">${esc(q.s.zh)} <button class="mini" data-say="${esc(q.s.en)}"><i class="ic ic-say"></i></button></div>`;
       hintLadder(el, [() => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => { speak(q.s.en); return '<i class="ic ic-say"></i> 聽整句，照順序排'; }, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
@@ -720,7 +721,7 @@ const Q = {
   },
   listenBlocks: {
     label: '聽句子排積木',
-    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pickS(c, ss); return { key: s.en, s }; },
+    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 12; }); if (!ss.length) return null; const s = pickS(c, ss); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">聽句子，把積木排出來</p>${sayBtns(q.s.en)}`;
       setTimeout(() => speak(q.s.en), 350);
@@ -1114,9 +1115,10 @@ function runQuiz(o) {
 // 年級練習：所有題型直接混在答題裡
 const GRADE_TYPES = ['listen', 'pic2word', 'listenSpell', 'typeWord', 'missingLetter', 'spellBlocks', 'fillSentence',
   'sentenceBlocks', 'listenBlocks', 'listenSentenceZh', 'writeSentence', 'match', 'chatReply', 'makeSentence', 'speakSay'];
-const DAILY_FOR = g => (+g <= 2 ? ['polite', 'morning'] : +g <= 4 ? ['polite', 'morning', 'school', 'meal', 'night', 'friends'] : DAILY.map(c => c.id));
+const DAILY_FOR = g => (GRADES[g].level !== 'elem' ? [] : +g <= 2 ? ['polite', 'morning'] : +g <= 4 ? ['polite', 'morning', 'school', 'meal', 'night', 'friends'] : DAILY.map(c => c.id));
 
 function home() {
+  const lv = store.get('level', 'elem');
   const best = store.get('best', {});
   view(`
     <section class="hero">
@@ -1124,8 +1126,9 @@ function home() {
       
     </section>
     <button class="gept-banner" data-gept><span><b>全民英檢初級特訓</b><small>聽力・閱讀・寫作・口說 ＋ 模擬考</small></span><span class="go">GO →</span></button>
+    <div class="levels">${LEVELS.map(l => `<button class="lv ${l.id === lv ? 'on' : ''}" data-lv="${l.id}"><b>${l.name}</b><small>${l.sub}</small></button>`).join('')}</div>
     <h3 class="sec">選擇年級，直接開始</h3>
-    <div class="grades">${GRADE_KEYS.map(g => { const G = GRADES[g], b = best[`${g}-all`]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi">${g}</span><b>${G.name}</b><small>${G.theme}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
+    <div class="grades">${GRADE_KEYS.filter(g => GRADES[g].level === lv).map(g => { const G = GRADES[g], b = best[`${g}-all`]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi${G.badge ? ' sm' : ''}">${G.badge || g}</span><b>${G.name}</b><small>${G.theme}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
     <h3 class="sec">更多練習</h3>
     <div class="modes">
       ${modeCard('daily', '', '生活英文', '每天都用得到的句子')}
@@ -1135,6 +1138,7 @@ function home() {
     </div>
     <p class="tip"><i class="ic ic-say"></i> 發音使用瀏覽器內建語音・<i class="ic ic-mic"></i> 說話功能建議使用 Chrome 或 Edge・進度會自動存在這台電腦</p>`);
   $('[data-gept]').onclick = geptHome;
+  $$('.lv').forEach(b => b.onclick = () => { store.set('level', b.dataset.lv); home(); });
   $$('.grade').forEach(b => b.onclick = () => gradeView(b.dataset.g));
   const back = home;
   const act = { daily: () => dailyMenu(back), free: () => freeChat(back), diary: () => diary(back), works: () => works(back) };

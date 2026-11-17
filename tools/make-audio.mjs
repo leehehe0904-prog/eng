@@ -27,7 +27,7 @@ const OUT = path.join(ROOT, 'audio');
 // ---------- 讀取題庫 ----------
 const ctx = { window: {}, console };
 vm.createContext(ctx);
-const src = ['data.js', 'gept.js'].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
+const src = ['data.js', 'levels.js', 'gept.js'].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
   + '\n;globalThis.__D = { GRADES, DAILY, BOT_QUESTIONS, CHAT_HINTS, GEPT };';
 vm.runInContext(src, ctx);
 const { GRADES, DAILY, BOT_QUESTIONS, CHAT_HINTS, GEPT } = ctx.__D;
