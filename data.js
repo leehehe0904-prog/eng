@@ -451,3 +451,115 @@ const CHAT_HINTS = {
   "What's your favorite animal?": ['My favorite animal is the ___.', ['panda', 'dog', 'cat', 'tiger', 'rabbit']],
   'What did you eat for breakfast?': ['I ate ___.', ['bread', 'eggs', 'a sandwich', 'rice balls']],
 };
+
+// ---------- 擴充題庫：每個年級再多一些單字和句子 ----------
+const MORE = {
+  1: {
+    words: [
+      ['orange', '橘子', '🍊'], ['grape', '葡萄', '🍇'], ['lemon', '檸檬', '🍋'], ['peach', '桃子', '🍑'], ['cherry', '櫻桃', '🍒'],
+      ['four', '四', '4️⃣'], ['five', '五', '5️⃣'], ['six', '六', '6️⃣'], ['seven', '七', '7️⃣'], ['eight', '八', '8️⃣'],
+      ['nine', '九', '9️⃣'], ['ten', '十', '🔟'], ['black', '黑色', '⚫'], ['white', '白色', '⚪'], ['pink', '粉紅色', '🩷'],
+      ['purple', '紫色', '🟣'], ['brown', '咖啡色', '🟤'], ['cow', '牛', '🐮'], ['horse', '馬', '🐴'], ['bear', '熊', '🐻'],
+      ['frog', '青蛙', '🐸'], ['ant', '螞蟻', '🐜'], ['bee', '蜜蜂', '🐝'], ['moon', '月亮', '🌙'], ['star', '星星', '⭐'],
+      ['tree', '樹', '🌳'], ['flower', '花', '🌸'], ['car', '汽車', '🚗'], ['doll', '娃娃', '🪆'], ['kite', '風箏', '🪁'],
+    ],
+    sentences: [
+      ['I see a red apple.', '我看到一顆紅蘋果。'], ['The cat is black.', '這隻貓是黑色的。'], ['I have five pens.', '我有五支筆。'],
+      ['This is my book.', '這是我的書。'], ['It is a big bear.', '牠是一隻大熊。'], ['I like grapes.', '我喜歡葡萄。'],
+      ['The moon is white.', '月亮是白色的。'], ['Look at the star.', '看那顆星星。'], ['The bird can fly.', '鳥會飛。'],
+      ['Is it a frog?', '那是一隻青蛙嗎？'], ['How many cars?', '有幾輛車？'], ['Good night, Mom.', '媽媽晚安。'],
+    ],
+  },
+  2: {
+    words: [
+      ['grandpa', '爺爺', '👴'], ['grandma', '奶奶', '👵'], ['uncle', '叔叔', '👨‍🦱'], ['aunt', '阿姨', '👩‍🦰'], ['friend', '朋友', '🧑‍🤝‍🧑'],
+      ['hair', '頭髮', '💇'], ['face', '臉', '🙂'], ['tooth', '牙齒', '🦷'], ['arm', '手臂', '💪'], ['leg', '腿', '🦵'],
+      ['finger', '手指', '☝️'], ['ruler', '尺', '📏'], ['pencil', '鉛筆', '✏️'], ['crayon', '蠟筆', '🖍️'], ['box', '盒子', '📦'],
+      ['window', '窗戶', '🪟'], ['shirt', '襯衫', '👕'], ['dress', '洋裝', '👗'], ['shoes', '鞋子', '👟'], ['socks', '襪子', '🧦'],
+      ['coat', '外套', '🧥'], ['cap', '鴨舌帽', '🧢'], ['candy', '糖果', '🍬'], ['cookie', '餅乾', '🍪'], ['water', '水', '💧'],
+      ['tea', '茶', '🍵'], ['soup', '湯', '🥣'], ['sandwich', '三明治', '🥪'], ['robot', '機器人', '🤖'], ['sheep', '羊', '🐑'],
+      ['chicken', '雞', '🐔'], ['mouse', '老鼠', '🐭'],
+    ],
+    sentences: [
+      ['This is my grandpa.', '這是我的爺爺。'], ['Wash your hands.', '洗你的手。'], ['I have ten fingers.', '我有十根手指。'],
+      ['Can I have a cookie?', '我可以吃一塊餅乾嗎？'], ['Put on your shoes.', '穿上你的鞋子。'], ['Close the window, please.', '請關窗戶。'],
+      ['My aunt has a dog.', '我的阿姨有一隻狗。'], ['I want some water.', '我想要一些水。'], ['The robot is cool.', '這個機器人很酷。'],
+      ['Where is my pencil?', '我的鉛筆在哪裡？'], ['It is in the box.', '它在盒子裡。'], ['She is my friend.', '她是我的朋友。'],
+      ['Brush your teeth.', '刷你的牙齒。'],
+    ],
+  },
+  3: {
+    words: [
+      ['panda', '熊貓', '🐼'], ['zebra', '斑馬', '🦓'], ['giraffe', '長頸鹿', '🦒'], ['snake', '蛇', '🐍'], ['koala', '無尾熊', '🐨'],
+      ['penguin', '企鵝', '🐧'], ['dolphin', '海豚', '🐬'], ['dumplings', '水餃', '🥟'], ['salad', '沙拉', '🥗'], ['fries', '薯條', '🍟'],
+      ['corn', '玉米', '🌽'], ['carrot', '紅蘿蔔', '🥕'], ['nurse', '護士', '💉'], ['farmer', '農夫', '🧑‍🌾'], ['cook', '廚師', '🧑‍🍳'],
+      ['police', '警察', '👮'], ['driver', '司機', '🚖'], ['angry', '生氣的', '😠'], ['scared', '害怕的', '😨'], ['sleepy', '想睡的', '🥱'],
+      ['thirsty', '口渴的', '🥤'], ['dance', '跳舞', '💃'], ['read', '閱讀', '📰'], ['write', '寫', '✍️'], ['draw', '畫畫', '🎨'],
+      ['fly', '飛', '🕊️'], ['climb', '爬', '🧗'], ['skate', '溜冰', '⛸️'], ['cry', '哭', '😭'], ['laugh', '笑', '😂'], ['walk', '走路', '🚶'],
+    ],
+    sentences: [
+      ['I can dance.', '我會跳舞。'], ['Can you draw a panda?', '你會畫熊貓嗎？'], ["No, I can't.", '不，我不會。'],
+      ['The giraffe is tall.', '長頸鹿很高。'], ['She is a nurse.', '她是一位護士。'], ['He is a farmer.', '他是一位農夫。'],
+      ['I am thirsty.', '我口渴了。'], ['Are you scared?', '你害怕嗎？'], ['I like dumplings.', '我喜歡水餃。'],
+      ['The penguin can swim.', '企鵝會游泳。'], ["Let's sing together.", '我們一起唱歌吧。'], ['What are you doing?', '你在做什麼？'],
+      ['I am reading a book.', '我正在讀一本書。'], ['They are laughing.', '他們正在笑。'],
+    ],
+  },
+  4: {
+    words: [
+      ['snowy', '下雪的', '🌨️'], ['warm', '溫暖的', '🌤️'], ['cool', '涼爽的', '🍃'], ['sofa', '沙發', '🛋️'], ['lamp', '檯燈', '💡'],
+      ['toilet', '馬桶', '🚽'], ['garden', '花園', '🏡'], ['soccer', '足球', '⚽'], ['tennis', '網球', '🎾'], ['badminton', '羽毛球', '🏸'],
+      ['violin', '小提琴', '🎻'], ['drum', '鼓', '🥁'], ['trumpet', '喇叭', '🎺'], ['sweater', '毛衣', '🧶'], ['shorts', '短褲', '🩳'],
+      ['pants', '長褲', '👖'], ['gloves', '手套', '🧤'], ['scarf', '圍巾', '🧣'], ['boots', '靴子', '🥾'], ['noon', '中午', '🕛'],
+      ['night', '晚上', '🌃'], ['afternoon', '下午', '🌇'], ['evening', '傍晚', '🌆'], ['shower', '淋浴', '🚿'], ['bath', '泡澡', '🛀'],
+      ['sleep', '睡覺', '🛌'], ['wake', '醒來', '🌄'], ['fan', '扇子', '🪭'], ['toothbrush', '牙刷', '🪥'], ['snack', '點心', '🍿'],
+    ],
+    sentences: [
+      ['It is cold and windy.', '天氣又冷又有風。'], ['Put on your gloves.', '戴上你的手套。'], ['What time do you get up?', '你幾點起床？'],
+      ['I get up at six thirty.', '我六點半起床。'], ['I take a shower at night.', '我晚上洗澡。'], ['The lamp is on the desk.', '檯燈在書桌上。'],
+      ['Dad is sleeping on the sofa.', '爸爸正在沙發上睡覺。'], ['Can you play the violin?', '你會拉小提琴嗎？'], ['I play tennis on Sunday.', '我星期日打網球。'],
+      ['We have lunch at noon.', '我們中午吃午餐。'], ['It is snowy in Japan.', '日本在下雪。'], ['Where are my boots?', '我的靴子在哪裡？'],
+      ['They are under the bed.', '它們在床底下。'],
+    ],
+  },
+  5: {
+    words: [
+      ['school', '學校', '🏫'], ['zoo', '動物園', '🦁'], ['bank', '銀行', '🏦'], ['beach', '海灘', '🌊'], ['mountain', '山', '⛰️'],
+      ['island', '島', '🏝️'], ['city', '城市', '🏙️'], ['ship', '船', '🚢'], ['boat', '小船', '⛵'], ['subway', '地鐵', '🚇'],
+      ['scooter', '機車', '🛵'], ['truck', '卡車', '🚚'], ['helicopter', '直升機', '🚁'], ['Christmas', '聖誕節', '🎄'], ['Halloween', '萬聖節', '🎃'],
+      ['gift', '禮物', '🎁'], ['card', '卡片', '💌'], ['shop', '商店', '🏪'], ['market', '市場', '🧺'], ['dollar', '元', '💲'],
+      ['new', '新的', '🆕'], ['old', '舊的；老的', '🏚️'], ['clean', '乾淨的', '🧼'], ['dirty', '髒的', '🗑️'], ['fast', '快的', '⚡'],
+      ['slow', '慢的', '🐢'], ['heavy', '重的', '🏋️'], ['light', '輕的', '🪶'], ['near', '近的', '📍'], ['far', '遠的', '🔭'], ['popular', '受歡迎的', '🌟'],
+    ],
+    sentences: [
+      ['I go to school by MRT.', '我搭捷運去上學。'], ['How much is the gift?', '這個禮物多少錢？'], ['It is fifty dollars.', '它是五十元。'],
+      ['The bag is too heavy.', '這個包包太重了。'], ['My school is near my house.', '我的學校在我家附近。'], ['We went to the beach.', '我們去了海灘。'],
+      ['The city is very busy.', '這個城市非常繁忙。'], ["Let's take a boat.", '我們去坐船吧。'], ['This shop is very popular.', '這家店很受歡迎。'],
+      ['My room is clean.', '我的房間很乾淨。'], ['The train is fast.', '火車很快。'], ['Which one do you want?', '你想要哪一個？'],
+      ['We have a party on Christmas.', '我們聖誕節有派對。'],
+    ],
+  },
+  6: {
+    words: [
+      ['pilot', '飛行員', '🧑‍✈️'], ['artist', '藝術家', '🧑‍🎨'], ['singer', '歌手', '🧑‍🎤'], ['writer', '作家', '🖋️'], ['reporter', '記者', '🎙️'],
+      ['programmer', '程式設計師', '🧑‍💻'], ['planet', '行星', '🪐'], ['space', '太空', '🌌'], ['rocket', '火箭', '🚀'], ['ocean', '海洋', '🐋'],
+      ['forest', '森林', '🌲'], ['trash', '垃圾', '🚮'], ['plastic', '塑膠', '🧴'], ['energy', '能源', '🔋'], ['pollution', '污染', '🏭'],
+      ['electricity', '電力', '🔌'], ['math', '數學', '➗'], ['English', '英文', '🔤'], ['music', '音樂', '🎵'], ['art', '美術', '🖼️'],
+      ['contest', '比賽', '🏆'], ['prize', '獎品', '🥇'], ['dream', '夢想', '💭'], ['future', '未來', '🔮'], ['habit', '習慣', '🗓️'],
+      ['famous', '有名的', '📸'], ['useful', '有用的', '🧰'], ['exciting', '令人興奮的', '🎢'], ['boring', '無聊的', '😑'], ['difficult', '困難的', '🧩'],
+      ['easy', '簡單的', '👌'], ['brave', '勇敢的', '🦸'], ['honest', '誠實的', '🙋'],
+    ],
+    sentences: [
+      ['I want to be a pilot.', '我想成為一位飛行員。'], ['She is the best singer in our class.', '她是我們班最會唱歌的人。'],
+      ['Math is more difficult than English.', '數學比英文難。'], ['We should save energy.', '我們應該節約能源。'],
+      ['Please put the trash in the trash can.', '請把垃圾丟進垃圾桶。'], ['There are eight planets.', '有八大行星。'],
+      ['I visited a forest last summer.', '我去年夏天去了一座森林。'], ['He won the first prize.', '他得了第一名。'],
+      ['What is your dream?', '你的夢想是什麼？'], ['It was an exciting game.', '那是一場刺激的比賽。'],
+      ['Plastic is bad for the ocean.', '塑膠對海洋不好。'], ['I will study harder next year.', '我明年會更用功。'], ['Be brave and honest.', '要勇敢又誠實。'],
+    ],
+  },
+};
+for (const g in MORE) {
+  GRADES[g].words.push(...MORE[g].words);
+  GRADES[g].sentences.push(...MORE[g].sentences);
+}

@@ -503,6 +503,32 @@ function blockPuzzle(el, pieces, done, rev, o = {}) {
     done(ok, rev);
   };
 }
+/* ---------- 不重複出題 ----------
+   記住每個單字／句子／題目上次出現的順序（存在這台電腦），每次都優先出「最久沒出現」的，
+   全部輪過一遍之後才會再出現重複的。 */
+const SEEN = store.get('seen', {});
+let seenTick = store.get('seenTick', 0);
+function lruPick(list, keyOf) {
+  if (!list.length) return null;
+  let best = Infinity, cands = [];
+  for (const x of list) {
+    const v = SEEN[keyOf(x)] || 0;
+    if (v < best) { best = v; cands = [x]; } else if (v === best) cands.push(x);
+  }
+  const c = pick(cands);
+  SEEN[keyOf(c)] = ++seenTick;
+  return c;
+}
+const saveSeen = () => { store.set('seen', SEEN); store.set('seenTick', seenTick); };
+function lruSample(list, n, ns) {
+  const keyOf = it => ns + ':' + (typeof it === 'string' ? it : JSON.stringify(it).slice(0, 120));
+  const out = [], rest = list.slice();
+  while (out.length < n && rest.length) { const c = lruPick(rest, keyOf); out.push(c); rest.splice(rest.indexOf(c), 1); }
+  saveSeen();
+  return shuffle(out);
+}
+const pickW = (c, list) => (c.lru ? lruPick(list, w => 'w:' + w.en) : pick(list));
+const pickS = (c, list) => (c.lru ? lruPick(list, x => 's:' + x.en) : pick(list));
 const wrev = w => ({ en: w.en, zh: w.zh });
 const spellable = words => words.filter(w => /^[A-Za-z]{3,10}$/.test(w.en));
 function findVocab(tok, words) {
@@ -513,7 +539,7 @@ function findVocab(tok, words) {
 const Q = {
   listen: {
     label: '聽音選圖',
-    make(c) { if (c.words.length < 4) return null; const a = pick(c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
+    make(c) { if (c.words.length < 4) return null; const a = pickW(c, c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">聽一聽，選出正確的圖</p>${sayBtns(q.a.en)}${optButtons(q.opts.map(o => `<span class="emo">${o.emoji}</span><small>${esc(o.zh)}</small>`), 'pics')}`;
       setTimeout(() => speak(q.a.en), 350);
@@ -522,7 +548,7 @@ const Q = {
   },
   pic2word: {
     label: '看圖選字',
-    make(c) { if (c.words.length < 4) return null; const a = pick(c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
+    make(c) { if (c.words.length < 4) return null; const a = pickW(c, c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">這是什麼？選出正確的英文</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(o => esc(o.en)), 'words')}`;
       hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => { speak(q.a.en); return '<i class="ic ic-say"></i> 聽聽看發音'; }]);
@@ -531,7 +557,7 @@ const Q = {
   },
   listenSpell: {
     label: '聽寫單字',
-    make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
+    make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pickW(c, ws); return { key: a.en, a }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">聽一聽，把單字拼出來</p>${sayBtns(q.a.en)}`;
       setTimeout(() => speak(q.a.en), 350);
@@ -542,7 +568,7 @@ const Q = {
   },
   typeWord: {
     label: '看圖拼字',
-    make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
+    make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pickW(c, ws); return { key: a.en, a }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">看圖，寫出英文單字</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div>`;
       const lb = letterBoxes(el, q.a.en, 1);
@@ -554,7 +580,7 @@ const Q = {
     label: '缺字母填空',
     make(c) {
       const ws = spellable(c.words); if (!ws.length) return null;
-      const a = pick(ws); const idx = Math.floor(Math.random() * a.en.length);
+      const a = pickW(c, ws); const idx = Math.floor(Math.random() * a.en.length);
       const letter = a.en[idx].toLowerCase();
       const others = shuffle('abcdefghijklmnopqrstuvwxyz'.split('').filter(x => x !== letter)).slice(0, 3);
       return { key: a.en, a, idx, letter, opts: shuffle([letter, ...others]) };
@@ -568,7 +594,7 @@ const Q = {
   },
   spellBlocks: {
     label: '字母積木',
-    make(c) { const ws = spellable(c.words).filter(w => w.en.length <= 9); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
+    make(c) { const ws = spellable(c.words).filter(w => w.en.length <= 9); if (!ws.length) return null; const a = pickW(c, ws); return { key: a.en, a }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">用字母積木拼出單字</p><div class="big-emo sm">${q.a.emoji}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}"><i class="ic ic-say"></i></button></div>`;
       hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => `前半段：<b>${esc(q.a.en.slice(0, Math.ceil(q.a.en.length / 2)))}</b> …`]);
@@ -579,7 +605,7 @@ const Q = {
     label: '句子填空',
     make(c) {
       const ss = c.sentences.filter(s => tokens(s.en).length >= 3); if (!ss.length) return null;
-      const s = pick(ss); const raw = s.en.split(/\s+/);
+      const s = pickS(c, ss); const raw = s.en.split(/\s+/);
       const cands = raw.map((w, i) => ({ t: stripP(w), i, v: findVocab(stripP(w), c.words) })).filter(x => x.i > 0 && x.t.length > 1);
       let ch = cands.filter(x => x.v); if (!ch.length) ch = cands.filter(x => x.t.length >= 3); if (!ch.length) ch = cands; if (!ch.length) return null;
       const x = pick(ch), ans = x.t;
@@ -603,7 +629,7 @@ const Q = {
   },
   sentenceBlocks: {
     label: '句子積木',
-    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pick(ss); return { key: s.en, s }; },
+    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pickS(c, ss); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">把積木排成正確的句子</p><div class="zh-big">${esc(q.s.zh)} <button class="mini" data-say="${esc(q.s.en)}"><i class="ic ic-say"></i></button></div>`;
       hintLadder(el, [() => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => { speak(q.s.en); return '<i class="ic ic-say"></i> 聽整句，照順序排'; }, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
@@ -612,7 +638,7 @@ const Q = {
   },
   listenBlocks: {
     label: '聽句子排積木',
-    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pick(ss); return { key: s.en, s }; },
+    make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pickS(c, ss); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">聽句子，把積木排出來</p>${sayBtns(q.s.en)}`;
       setTimeout(() => speak(q.s.en), 350);
@@ -622,7 +648,7 @@ const Q = {
   },
   listenSentenceZh: {
     label: '聽句子選意思',
-    make(c) { if (c.sentences.length < 4) return null; const s = pick(c.sentences); return { key: s.en, s, opts: shuffle([s, ...sample(c.sentences.filter(x => x !== s), 3)]) }; },
+    make(c) { if (c.sentences.length < 4) return null; const s = pickS(c, c.sentences); return { key: s.en, s, opts: shuffle([s, ...sample(c.sentences.filter(x => x !== s), 3)]) }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">聽一聽，這句話是什麼意思？</p>${sayBtns(q.s.en)}<div class="hl"></div>${optButtons(q.opts.map(o => esc(o.zh)), 'zh-opts')}`;
       hintLadder(el, [() => { speak(q.s.en, 0.55); return '慢慢再聽一次'; }, () => `英文句子：<b>${esc(q.s.en)}</b>`]);
@@ -632,7 +658,7 @@ const Q = {
   },
   writeSentence: {
     label: '看中文寫句子',
-    make(c) { if (!c.sentences.length) return null; const s = pick(c.sentences); return { key: s.en, s }; },
+    make(c) { if (!c.sentences.length) return null; const s = pickS(c, c.sentences); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">把這句中文寫成英文</p><div class="zh-big">${esc(q.s.zh)}</div>
 `;
@@ -685,7 +711,7 @@ function bindHint(box, getInput, h) {
     const p = v.indexOf('___');
     if (p >= 0) inp.setSelectionRange(p, p + 3); else inp.setSelectionRange(v.length, v.length);
   };
-  $$('.wchip', box).forEach(b => b.onclick = () => { speak(b.textContent); fillIn(b.textContent); });
+  $$('.wchip', box).forEach(b => b.onclick = () => fillIn(b.textContent));
   $$('.chip.ex', box).forEach(b => b.onclick = () => { const inp = getInput(); if (inp && !inp.disabled) { inp.value = b.textContent; inp.focus(); } });
   const se = $('[data-showex]', box);
   if (se) se.onclick = () => { $('.exs', box).hidden = false; se.remove(); };
@@ -731,7 +757,7 @@ Object.assign(Q, {
     make(c) {
       const turns = (c.dialogues || []).flatMap(d => d.turns.map((t, i) => ({ t, prev: i > 0 ? d.turns[i - 1] : null })));
       if (!turns.length) return null;
-      const x = pick(turns);
+      const x = c.lru ? lruPick(turns, x => 't:' + x.t.ai) : pick(turns);
       return { key: 'chat:' + x.t.ai, t: x.t, prev: x.prev };
     },
     render(el, q, done) {
@@ -755,7 +781,7 @@ Object.assign(Q, {
     make(c) {
       const ws = c.words.filter(w => /^[A-Za-z]+$/.test(w.en));
       if (!ws.length) return null;
-      const w = pick(ws);
+      const w = pickW(c, ws);
       const ex = c.sentences.find(s => new RegExp(`\\b${w.en}`, 'i').test(s.en));
       return { key: 'make:' + w.en, w, ex };
     },
@@ -792,7 +818,7 @@ Object.assign(Q, {
       if (!SR) return null;
       const ss = c.sentences.filter(s => tokens(s.en).length <= 8);
       if (!ss.length) return null;
-      const s = pick(ss);
+      const s = pickS(c, ss);
       return { key: 'say:' + s.en, s };
     },
     render(el, q, done) {
@@ -914,7 +940,7 @@ Object.assign(Q, {
    測驗引擎
    ========================================================= */
 function buildQs(o) {
-  const ctx = { words: o.words || [], sentences: o.sentences || [], dialogues: o.dialogues || [] };
+  const ctx = { words: o.words || [], sentences: o.sentences || [], dialogues: o.dialogues || [], lru: true };
   const qs = [], used = new Set(), count = {};
   let guard = 0, last = null;
   while (qs.length < o.n && guard++ < 400) {
@@ -930,6 +956,7 @@ function buildQs(o) {
     count[type] = (count[type] || 0) + 1;
     qs.push(q);
   }
+  saveSeen();
   return qs;
 }
 
@@ -1461,16 +1488,16 @@ function works(back) {
    全民英檢初級特訓
    ========================================================= */
 const G_PARTS = [
-  { id: 'gPic', grp: 'L', icon: '', name: '第一部分 看圖辨義', desc: '看圖、聽問題，選出符合的描述', build: () => sample(GEPT.listenPic, 8).map(item => ({ type: 'gPic', item })) },
-  { id: 'gQA', grp: 'L', icon: '', name: '第二部分 問答', desc: '聽一句話，選出最適合的回應', build: () => sample(GEPT.listenQA, 10).map(item => ({ type: 'gQA', item })) },
-  { id: 'gDialog', grp: 'L', icon: '', name: '第三部分 簡短對話', desc: '聽男女對話，回答問題', build: () => sample(GEPT.listenDialog, 8).map(item => ({ type: 'gDialog', item })) },
-  { id: 'gTalk', grp: 'L', icon: '', name: '第四部分 短文聽解', desc: '聽一段短文，選出正確圖片', build: () => sample(GEPT.listenTalk, 6).map(item => ({ type: 'gTalk', item })) },
-  { id: 'gVocab', grp: 'R', icon: '', name: '第一部分 詞彙', desc: '選出最適合的字（含文法解析）', build: () => sample(GEPT.readVocab, 10).map(item => ({ type: 'gVocab', item })) },
-  { id: 'gCloze', grp: 'R', icon: '', name: '第二部分 段落填空', desc: '讀短文，選出空格的答案', build: () => { const p = sample(GEPT.readCloze, 2); return p.flatMap(item => item.blanks.map((_, n) => ({ type: 'gCloze', item, n }))); } },
-  { id: 'gComp', grp: 'R', icon: '', name: '第三部分 閱讀理解', desc: '讀告示、菜單、信件並回答', build: () => { const p = sample(GEPT.readComp, 3); return p.flatMap(item => item.qs.map((_, n) => ({ type: 'gComp', item, n }))); } },
-  { id: 'gRewrite', grp: 'W', icon: '', name: '單句寫作：句子改寫', desc: '改成問句、否定句、過去式…', build: () => sample(GEPT.rewrite, 8).map(item => ({ type: 'gRewrite', item })) },
-  { id: 'gCombine', grp: 'W', icon: '', name: '單句寫作：句子合併', desc: '用 and / but / because… 合併', build: () => sample(GEPT.combine, 8).map(item => ({ type: 'gCombine', item })) },
-  { id: 'gReorder', grp: 'W', icon: '', name: '單句寫作：重組', desc: '用積木把句子排出來', build: () => sample(GEPT.reorder, 8).map(item => ({ type: 'gReorder', item })) },
+  { id: 'gPic', grp: 'L', icon: '', name: '第一部分 看圖辨義', desc: '看圖、聽問題，選出符合的描述', build: () => lruSample(GEPT.listenPic, 8, 'glistenPic').map(item => ({ type: 'gPic', item })) },
+  { id: 'gQA', grp: 'L', icon: '', name: '第二部分 問答', desc: '聽一句話，選出最適合的回應', build: () => lruSample(GEPT.listenQA, 10, 'glistenQA').map(item => ({ type: 'gQA', item })) },
+  { id: 'gDialog', grp: 'L', icon: '', name: '第三部分 簡短對話', desc: '聽男女對話，回答問題', build: () => lruSample(GEPT.listenDialog, 8, 'glistenDialog').map(item => ({ type: 'gDialog', item })) },
+  { id: 'gTalk', grp: 'L', icon: '', name: '第四部分 短文聽解', desc: '聽一段短文，選出正確圖片', build: () => lruSample(GEPT.listenTalk, 6, 'glistenTalk').map(item => ({ type: 'gTalk', item })) },
+  { id: 'gVocab', grp: 'R', icon: '', name: '第一部分 詞彙', desc: '選出最適合的字（含文法解析）', build: () => lruSample(GEPT.readVocab, 10, 'greadVocab').map(item => ({ type: 'gVocab', item })) },
+  { id: 'gCloze', grp: 'R', icon: '', name: '第二部分 段落填空', desc: '讀短文，選出空格的答案', build: () => { const p = lruSample(GEPT.readCloze, 2, 'greadCloze'); return p.flatMap(item => item.blanks.map((_, n) => ({ type: 'gCloze', item, n }))); } },
+  { id: 'gComp', grp: 'R', icon: '', name: '第三部分 閱讀理解', desc: '讀告示、菜單、信件並回答', build: () => { const p = lruSample(GEPT.readComp, 3, 'greadComp'); return p.flatMap(item => item.qs.map((_, n) => ({ type: 'gComp', item, n }))); } },
+  { id: 'gRewrite', grp: 'W', icon: '', name: '單句寫作：句子改寫', desc: '改成問句、否定句、過去式…', build: () => lruSample(GEPT.rewrite, 8, 'grewrite').map(item => ({ type: 'gRewrite', item })) },
+  { id: 'gCombine', grp: 'W', icon: '', name: '單句寫作：句子合併', desc: '用 and / but / because… 合併', build: () => lruSample(GEPT.combine, 8, 'gcombine').map(item => ({ type: 'gCombine', item })) },
+  { id: 'gReorder', grp: 'W', icon: '', name: '單句寫作：重組', desc: '用積木把句子排出來', build: () => lruSample(GEPT.reorder, 8, 'greorder').map(item => ({ type: 'gReorder', item })) },
 ];
 
 function geptHome() {
@@ -1507,7 +1534,7 @@ function geptHome() {
     ({
       mock: () => runQuiz({ title: '英檢初級・初試模擬考', questions: buildMock(), rebuild: buildMock, mock: true, back }),
       vocab: () => gradeView('gept'),
-      para: () => geptParagraph(Math.floor(Math.random() * GEPT.paragraph.length)),
+      para: () => geptParagraph(GEPT.paragraph.indexOf(lruSample(GEPT.paragraph, 1, 'gparagraph')[0])),
       repeat: () => speakRepeat(),
       read: () => speakRead(0),
       answer: () => speakAnswer(),
@@ -1518,15 +1545,15 @@ function geptHome() {
 
 function buildMock() {
   const L = [
-    ...sample(GEPT.listenPic, 3).map(item => ({ type: 'gPic', item })),
-    ...sample(GEPT.listenQA, 4).map(item => ({ type: 'gQA', item })),
-    ...sample(GEPT.listenDialog, 4).map(item => ({ type: 'gDialog', item })),
-    ...sample(GEPT.listenTalk, 2).map(item => ({ type: 'gTalk', item })),
+    ...lruSample(GEPT.listenPic, 3, 'glistenPic').map(item => ({ type: 'gPic', item })),
+    ...lruSample(GEPT.listenQA, 4, 'glistenQA').map(item => ({ type: 'gQA', item })),
+    ...lruSample(GEPT.listenDialog, 4, 'glistenDialog').map(item => ({ type: 'gDialog', item })),
+    ...lruSample(GEPT.listenTalk, 2, 'glistenTalk').map(item => ({ type: 'gTalk', item })),
   ].map(q => ({ ...q, sec: 'L' }));
-  const cloze = pick(GEPT.readCloze);
-  const comps = sample(GEPT.readComp, 2);
+  const cloze = lruSample(GEPT.readCloze, 1, 'greadCloze')[0];
+  const comps = lruSample(GEPT.readComp, 2, 'greadComp');
   const R = [
-    ...sample(GEPT.readVocab, 6).map(item => ({ type: 'gVocab', item })),
+    ...lruSample(GEPT.readVocab, 6, 'greadVocab').map(item => ({ type: 'gVocab', item })),
     ...cloze.blanks.map((_, n) => ({ type: 'gCloze', item: cloze, n })),
     ...comps.flatMap(item => item.qs.map((_, n) => ({ type: 'gComp', item, n }))),
   ].map(q => ({ ...q, sec: 'R' }));
@@ -1553,7 +1580,7 @@ function geptParagraph(idx) {
 /* ---------- 口說：複誦 ---------- */
 const scoreMsg = p => (p >= 90 ? '非常好！' : p >= 70 ? '不錯！再說清楚一點' : p >= 40 ? '有進步空間，再試一次' : '再聽一次，跟著說說看');
 function speakRepeat() {
-  const list = sample(GEPT.repeat, 6);
+  const list = lruSample(GEPT.repeat, 6, 'grepeat');
   let i = 0;
   draw();
   function draw() {
@@ -1611,7 +1638,7 @@ function speakRead(idx) {
 
 /* ---------- 口說：回答問題 ---------- */
 function speakAnswer() {
-  const list = sample(GEPT.answer, 5);
+  const list = lruSample(GEPT.answer, 5, 'ganswer');
   let i = 0;
   draw();
   function draw() {
