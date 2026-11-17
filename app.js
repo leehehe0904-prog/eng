@@ -1344,7 +1344,8 @@ function learnerInfo() {
   const p = currentProfile();
   if (!p) return '';
   const city = COUNTIES.find(c => c[0] === p.city);
-  return `The learner's name is ${p.name || 'not given'}${p.age ? `, age ${p.age}` : ''}${city ? `, living in ${city[1]}, Taiwan` : ''}.`;
+  const stage = { elem: 'elementary school', jh: 'junior high school', sh: 'senior high school', uni: 'university' }[p.stage] || '';
+  return `The learner's name is ${p.name || 'not given'}${p.age ? `, age ${p.age}` : ''}${city ? `, living in ${city[1]}, Taiwan` : ''}${p.school ? `, studying at ${p.school}${stage ? ` (a ${stage})` : ''}` : stage ? `, a ${stage} student` : ''}.`;
 }
 /** AI 聊天的系統提示（會依照年齡調整難度；extra 可以加上話題） */
 function aiSystem(extra = '') {
@@ -1826,12 +1827,12 @@ function switchProfile(id) { rawSet('engAdv_pid', id); location.reload(); }   //
 
 function profilePage(back, editId) {
   const list = profiles(), cur = currentProfile();
-  const ed = editId === 'new' ? { id: '', name: '', age: '', city: '' } : list.find(p => p.id === editId) || null;
+  const ed = editId === 'new' ? { id: '', name: '', age: '', city: '', stage: '', school: '' } : list.find(p => p.id === editId) || null;
   view(`${bar('個人資料')}
     <div class="card">
       <p class="ask">目前使用：${cur ? `<b>${esc(cur.name)}</b>（${cur.age ? cur.age + ' 歲' : '未填年齡'}${cur.city ? '・' + esc(cur.city) : ''}）` : '<b>訪客</b>（沒有登入，進度存在共用區）'}</p>
       <div class="profiles">${list.map(p => `<div class="pf ${cur && cur.id === p.id ? 'on' : ''}"><span class="pf-av" style="background:${p.color}">${esc((p.name || '?').slice(0, 1))}</span>
-        <div><b>${esc(p.name)}</b><small>${p.age ? p.age + ' 歲' : ''}${p.city ? '・' + esc(p.city) : ''}</small></div>
+        <div><b>${esc(p.name)}</b><small>${p.age ? p.age + ' 歲' : ''}${p.city ? '・' + esc(p.city) : ''}${p.school ? '・' + esc(p.school) : ''}</small></div>
         ${cur && cur.id === p.id ? '<span class="badge">使用中</span>' : `<button class="btn primary" data-use="${p.id}">登入</button>`}
         <button class="mini" data-edit="${p.id}">編輯</button></div>`).join('') || '<p class="note-s">還沒有任何學生，先新增一個吧！</p>'}</div>
       <div class="row"><button class="btn" data-new>＋ 新增學生</button>${cur ? '<button class="btn ghost" data-out>登出（改用訪客）</button>' : ''}</div>
@@ -1840,6 +1841,9 @@ function profilePage(back, editId) {
       <label>名字（英文名或中文名都可以）<input class="type-in" data-name value="${esc(ed.name)}" maxlength="20"></label>
       <label>年齡（會用來挑選適合的時事話題和 AI 說話難度）<select data-age><option value="">請選擇</option>${Array.from({ length: 55 }, (_, i) => i + 6).map(a => `<option value="${a}" ${+ed.age === a ? 'selected' : ''}>${a} 歲</option>`).join('')}</select></label>
       <label>縣市<select data-city><option value="">（不填）</option>${COUNTIES.map(([c]) => `<option ${ed.city === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+      <label>學校階段（首頁會自動切到這個階段）<select data-stage>${LEVELS.map(l => `<option value="${l.id}" ${(ed.stage || (ed.age ? levelForAge(+ed.age) : 'elem')) === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}</select></label>
+      <label>學校（先選縣市，再打學校名稱的一部分，例如「中正」）<input class="type-in" data-school list="school-list" value="${esc(ed.school || '')}" placeholder="輸入或從清單選擇學校" autocomplete="off"><datalist id="school-list"></datalist></label>
+      <p class="note-s school-count"></p>
       <div class="row"><button class="btn primary" data-save>儲存並登入</button>${ed.id ? '<button class="btn ghost" data-del>刪除這個學生</button>' : ''}</div>
     </div>` : ''}`, back);
   $$('[data-use]').forEach(b => b.onclick = () => switchProfile(b.dataset.use));
@@ -1847,17 +1851,31 @@ function profilePage(back, editId) {
   $('[data-new]').onclick = () => profilePage(back, 'new');
   const out = $('[data-out]'); if (out) out.onclick = () => switchProfile(null);
   if (!ed) return;
+  // 學校清單：依縣市和階段列出教育部名錄裡的學校
+  let stageTouched = !!ed.stage;
+  const fillSchools = () => loadSchools().then(S => {
+    const k = { elem: 'e', jh: 'j', sh: 'h', uni: 'u' }[$('[data-stage]').value];
+    const city = $('[data-city]').value;
+    const names = city ? (S[k][city] || []) : Object.values(S[k]).flat();
+    $('#school-list').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+    $('.school-count').textContent = city ? `${city}共有 ${names.length} 所${LEVELS.find(l => l.id === $('[data-stage]').value).name}可以選（資料：教育部各級學校名錄）` : '先選縣市，學校清單會比較短、比較好找。';
+  }).catch(() => { $('.school-count').textContent = '學校清單載入失敗，可以直接打學校名稱。'; });
+  $('[data-city]').onchange = fillSchools;
+  $('[data-stage]').onchange = () => { stageTouched = true; fillSchools(); };
+  $('[data-age]').onchange = () => { if (!stageTouched && +$('[data-age]').value) { $('[data-stage]').value = levelForAge(+$('[data-age]').value); fillSchools(); } };
+  fillSchools();
   $('[data-save]').onclick = () => {
     const name = $('[data-name]').value.trim(), age = +$('[data-age]').value || 0, city = $('[data-city]').value;
+    const stage = $('[data-stage]').value, school = $('[data-school]').value.trim();
     if (!name) return toast('請輸入名字');
     if (!age) return toast('請選擇年齡');
     const all = profiles();
     const colors = ['#ff6b6b', '#ff922b', '#40c057', '#339af0', '#845ef7', '#f06595', '#20c997'];
     let p = all.find(x => x.id === ed.id);
     if (!p) { p = { id: Date.now().toString(36), color: pick(colors) }; all.push(p); }
-    Object.assign(p, { name, age, city });
+    Object.assign(p, { name, age, city, stage, school });
     store.set('profiles', all);
-    rawSet(`engAdv_p${p.id}_level`, levelForAge(age));   // 依年齡預設首頁的學習階段
+    rawSet(`engAdv_p${p.id}_level`, stage || levelForAge(age));   // 首頁切到自己的學校階段
     switchProfile(p.id);
   };
   const del = $('[data-del]');
@@ -1867,6 +1885,17 @@ function profilePage(back, editId) {
     try { Object.keys(localStorage).filter(k => k.startsWith(`engAdv_p${ed.id}_`)).forEach(k => localStorage.removeItem(k)); } catch (e) { }
     if (cur && cur.id === ed.id) switchProfile(null); else profilePage(back);
   };
+}
+/** 學校名錄比較大，打開個人資料時才載入 */
+function loadSchools() {
+  if (window.SCHOOLS) return Promise.resolve(window.SCHOOLS);
+  return new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'schools.js';
+    s.onload = () => (window.SCHOOLS ? ok(window.SCHOOLS) : fail());
+    s.onerror = fail;
+    document.head.appendChild(s);
+  });
 }
 function drawWhoButton() {
   const b = $('[data-who]'); if (!b) return;
