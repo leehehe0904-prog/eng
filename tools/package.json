@@ -1,0 +1,13 @@
+{
+  "name": "eng-audio-tools",
+  "private": true,
+  "type": "module",
+  "description": "產生網站用的高清語音檔（Kokoro TTS）",
+  "scripts": {
+    "audio": "node make-audio.mjs"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "kokoro-js": "^1.2.1"
+  }
+}

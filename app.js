@@ -27,46 +27,103 @@ for (const g of Object.values(GRADES)) {
 const GRADE_KEYS = Object.keys(GRADES).filter(k => /^\d+$/.test(k));
 const ALL_WORDS = GRADE_KEYS.flatMap(k => GRADES[k].W);
 
-/* ---------- 語音朗讀（瀏覽器內建 TTS） ---------- */
+/* ---------- 語音朗讀 ----------
+   1. 優先播放預先產生的高清錄音（audio/*.mp3，由 tools/make-audio.mjs 產生）
+   2. 沒有錄音的句子，改用瀏覽器裡最自然的男聲（Edge 的 Andrew / Guy 等 Natural 語音最好）
+   ------------------------------------------------------------------ */
 const TTS = 'speechSynthesis' in window;
-const VOICE = { en: null, m: null, f: null };
+const CLIPS = window.AUDIO_CLIPS || {};
+const VOICE = { m: null, f: null };
+const voicePref = () => store.get('voice', { name: '', rate: 1 });
+
+// 高品質男聲排序：越前面越好
+const MALE_RANK = [/(andrew|brian|guy|christopher|eric|roger|steffan|davis|tony|jason|ryan).*(natural|online)/i,
+  /(natural|online|neural).*(male|andrew|brian|guy|christopher|eric)/i, /google uk english male/i,
+  /\b(aaron|evan|nathan|tom|alex|daniel|fred)\b.*(enhanced|premium)?/i, /\b(david|mark|george|james)\b/i, /(?<!fe)\bmale\b/i];
+const FEMALE_RANK = [/(aria|jenny|ava|emma|michelle|ana|sara|nancy|jane).*(natural|online)/i, /google us english/i,
+  /\b(samantha|allison|ava|susan|zoe)\b/i, /\b(zira|hazel)\b/i, /female/i];
+function rankVoice(list, ranks) {
+  for (const re of ranks) { const v = list.find(x => re.test(x.name)); if (v) return v; }
+  return null;
+}
+function englishVoices() {
+  if (!TTS) return [];
+  return speechSynthesis.getVoices().filter(v => /^en[-_]/i.test(v.lang))
+    .sort((a, b) => (/natural|online|neural|enhanced|premium/i.test(b.name) - /natural|online|neural|enhanced|premium/i.test(a.name)) || a.name.localeCompare(b.name));
+}
 function pickVoices() {
-  if (!TTS) return;
-  const en = speechSynthesis.getVoices().filter(v => /^en[-_]/i.test(v.lang));
+  const en = englishVoices();
   const us = en.filter(v => /en[-_]US/i.test(v.lang));
-  const pool = us.length ? us : en;
-  VOICE.f = pool.find(v => /zira|samantha|jenny|aria|female|google us english|ava|allison|susan/i.test(v.name)) || null;
-  VOICE.m = pool.find(v => /\b(david|mark|guy|alex|fred|daniel|christopher|eric|roger|tony)\b|(?<!fe)male/i.test(v.name)) || null;
-  VOICE.en = VOICE.f || pool[0] || en[0] || null;
+  const pref = voicePref().name;
+  VOICE.m = (pref && en.find(v => v.name === pref)) || rankVoice(us, MALE_RANK) || rankVoice(en, MALE_RANK) || us[0] || en[0] || null;
+  VOICE.f = rankVoice(us, FEMALE_RANK) || rankVoice(en, FEMALE_RANK) || VOICE.m;
 }
 if (TTS) { pickVoices(); speechSynthesis.onvoiceschanged = pickVoices; }
 
 function cleanForSpeech(t) {
-  return String(t).replace(/\p{Extended_Pictographic}|️|‍/gu, ' ').replace(/_{2,}/g, ' blank ').replace(/\s+/g, ' ').trim();
+  return String(t).replace(/\p{Extended_Pictographic}|️|‍/gu, ' ').replace(/_{2,}/g, ' blank ').replace(/\s+/g, ' ').replace(/ ([.,!?])/g, '$1').trim();
 }
-function utter(text, o = {}) {
-  const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
+/** 錄音檔名：FNV-1a 雜湊（tools/make-audio.mjs 用一樣的算法） */
+function clipKey(voice, text) {
+  let h = 0x811c9dc5;
+  const s = voice + '|' + text;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+const clipFor = (text, who) => { const k = clipKey(who === 'W' ? 'f' : 'm', text); return CLIPS[k] ? `audio/${k}.mp3` : null; };
+
+/** 把一段文字拆成可播放的片段：整句有錄音就用錄音，否則逐句找錄音，找不到的用瀏覽器語音 */
+function toParts(it) {
+  const text = cleanForSpeech(it.text);
+  if (!text) return [];
+  const rate = it.rate || 0.85, who = it.who;
+  const whole = clipFor(text, who);
+  if (whole) return [{ url: whole, rate, text, who }];
+  return text.split(/(?<=[.!?])\s+/).filter(Boolean).map(s => {
+    const u = clipFor(s, who);
+    return u ? { url: u, rate, text: s, who } : { tts: s, rate, who };
+  });
+}
+
+const audioEl = new Audio();
+audioEl.preload = 'auto';
+let speechQ = [], speechGen = 0, speaking = false;
+function stopSpeech() {
+  speechGen++; speechQ = []; speaking = false;
+  try { audioEl.pause(); } catch (e) { }
+  if (TTS) speechSynthesis.cancel();
+}
+function playNext() {
+  const gen = speechGen;
+  const p = speechQ.shift();
+  if (!p) { speaking = false; return; }
+  speaking = true;
+  const next = () => { if (gen === speechGen) playNext(); };
+  if (typeof p === 'function') { try { p(); } catch (e) { } return next(); }
+  if (p.url) {
+    audioEl.src = p.url;
+    audioEl.playbackRate = Math.max(0.5, (p.rate / 0.85) * (voicePref().rate || 1));
+    audioEl.onended = next;
+    audioEl.onerror = () => { if (gen !== speechGen) return; speechQ.unshift({ tts: p.text || '', rate: p.rate, who: p.who }); next(); };
+    audioEl.play().catch(() => next());
+    return;
+  }
+  if (!TTS || !p.tts) return next();
+  const u = new SpeechSynthesisUtterance(p.tts);
   u.lang = 'en-US';
-  u.rate = o.rate || 0.85;
-  let v = VOICE.en, pitch = 1;
-  if (o.who === 'M') { v = VOICE.m || VOICE.en; pitch = VOICE.m ? 1 : 0.6; }
-  if (o.who === 'W') { v = VOICE.f || VOICE.en; pitch = VOICE.f ? 1 : 1.3; }
+  u.rate = (p.rate || 0.85) * (voicePref().rate || 1);
+  const v = p.who === 'W' ? VOICE.f : VOICE.m;
   if (v) u.voice = v;
-  u.pitch = pitch;
-  return u;
+  if (p.who === 'W' && VOICE.f === VOICE.m) u.pitch = 1.3;
+  u.onend = next; u.onerror = next;
+  speechSynthesis.speak(u);
 }
-/** 依序念出多段文字。queue=true 時不打斷正在念的內容 */
+/** 依序念出多段文字。queue=true 時接在目前正在念的後面 */
 function speakSeq(items, onEnd, queue) {
-  if (!TTS) { onEnd && onEnd(); return; }
-  if (!queue) speechSynthesis.cancel();
-  setTimeout(() => {
-    items.forEach((it, i) => {
-      if (!cleanForSpeech(it.text)) return;
-      const u = utter(it.text, it);
-      if (i === items.length - 1 && onEnd) u.onend = onEnd;
-      speechSynthesis.speak(u);
-    });
-  }, queue ? 0 : 80);
+  if (!queue) stopSpeech();
+  items.forEach(it => speechQ.push(...toParts(it)));
+  if (onEnd) speechQ.push(onEnd);
+  if (!speaking) setTimeout(playNext, queue ? 0 : 60);
 }
 const speak = (text, rate) => speakSeq([{ text, rate }]);
 
@@ -75,13 +132,35 @@ document.addEventListener('click', e => {
   if (b) speak(b.dataset.say, b.dataset.slow ? 0.55 : 0.85);
 });
 
+/** 語音設定視窗 */
+function voiceSettings() {
+  const vs = englishVoices();
+  const pref = voicePref();
+  const nClips = Object.keys(CLIPS).length;
+  const d = document.createElement('div');
+  d.className = 'modal';
+  d.innerHTML = `<div class="modal-card">
+    <h3>🔊 語音設定</h3>
+    <p class="note-s">${nClips ? `✅ 已載入 <b>${nClips}</b> 段高清男聲錄音，題目會優先使用錄音。` : '目前沒有高清錄音檔，使用瀏覽器內建語音。'}<br>沒有錄音的句子會用下面選的聲音。用 <b>Edge 瀏覽器</b>可以選到微軟的自然語音（例如 Andrew、Guy），聲音最好聽。</p>
+    <label>聲音：<select data-v>${vs.map(v => `<option value="${esc(v.name)}" ${VOICE.m && v.name === VOICE.m.name ? 'selected' : ''}>${esc(v.name)}</option>`).join('') || '<option>（這個瀏覽器沒有英文語音）</option>'}</select></label>
+    <label>速度：<select data-r>${[[0.8, '慢一點'], [1, '正常'], [1.15, '快一點']].map(([r, t]) => `<option value="${r}" ${+pref.rate === r ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <div class="row center"><button class="btn" data-test>▶ 試聽</button><button class="btn primary" data-ok>完成</button></div>
+  </div>`;
+  document.body.appendChild(d);
+  const save = () => { store.set('voice', { name: $('[data-v]', d).value, rate: +$('[data-r]', d).value }); pickVoices(); };
+  $('[data-v]', d).onchange = save; $('[data-r]', d).onchange = save;
+  $('[data-test]', d).onclick = () => { save(); speakSeq([{ text: 'Hello! I am Robo. Let us learn English together.' }]); };
+  $('[data-ok]', d).onclick = () => { save(); d.remove(); };
+  d.onclick = e => { if (e.target === d) d.remove(); };
+}
+
 /* ---------- 語音辨識（Chrome / Edge） ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRec = null;
 function recognize(btn, onText, o = {}) {
   if (!SR) { toast('這個瀏覽器不支援語音辨識，請改用 Chrome 或 Edge 🙏'); return; }
   if (activeRec) { activeRec.stop(); return; }
-  if (TTS) speechSynthesis.cancel();
+  stopSpeech();
   const r = new SR();
   r.lang = 'en-US'; r.interimResults = false; r.continuous = !!o.continuous; r.maxAlternatives = 1;
   let text = '';
@@ -219,7 +298,7 @@ const onLeave = f => leaveFns.push(f);
 function view(html, back) {
   leaveFns.forEach(f => { try { f(); } catch (e) { } });
   leaveFns = [];
-  if (TTS) speechSynthesis.cancel();
+  stopSpeech();
   if (activeRec) { try { activeRec.abort(); } catch (e) { } activeRec = null; }
   app.innerHTML = html;
   window.scrollTo(0, 0);
@@ -1411,4 +1490,5 @@ function speakAnswer() {
 
 /* ---------- 開始 ---------- */
 $('.brand').onclick = home;
+$('[data-voice]').onclick = voiceSettings;
 home();
