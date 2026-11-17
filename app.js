@@ -2438,6 +2438,13 @@ Q.mcq = {
     el.innerHTML = `<div class="mcq-q">${esc(it.q).replace(/\n/g, '<br>')}</div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
     bindOpts(el, it.a, done, { head: '正確答案：', en: it.opts[it.a], zh: it.ex ? '解析：' + it.ex : '', say: false });
     if (q.pad) scratchPad(el);   // 數學：底下有計算紙
+    if (it.demo) {                // 程式：底下有教學影片（程式一步一步執行）
+      const d = document.createElement('details');
+      d.className = 'demo';
+      d.innerHTML = '<summary>看教學影片：程式一步一步執行和介紹</summary>';
+      el.appendChild(d);
+      d.addEventListener('toggle', () => { if (d.open && !d.dataset.on) { d.dataset.on = 1; codeStepper(d, it.demo.code, { note: it.demo.note, input: it.demo.input, autoplay: true }); } });
+    }
   },
 };
 /** 計算紙：用手指、觸控筆或滑鼠在上面算 */
@@ -2496,7 +2503,12 @@ function subjectQuestions(subj, lvl, n = 10) {
     }
     return out;
   }
-  return lruSample(MCQ[subj][lvl], n, `${subj}-${lvl}`).map(([q, o, a, ex]) => mkMcq(q, o[a], o.filter((_, i) => i !== a), ex));
+  return lruSample(MCQ[subj][lvl], n, `${subj}-${lvl}`).map(item => {
+    const [q, o, a, ex] = item;
+    const m = mkMcq(q, o[a], o.filter((_, i) => i !== a), ex);
+    if (subj === 'code' && typeof CODE_DEMO !== 'undefined') m.item.demo = (CODE_DEMO[lvl] || [])[MCQ.code[lvl].indexOf(item)];
+    return m;
+  });
 }
 
 function subjectMenu() {
@@ -2696,7 +2708,17 @@ let py = null;
 const ready = loadPyodide({ indexURL: '${PYODIDE_BASE}' }).then(p => { py = p; postMessage({ t: 'ready' }); }).catch(e => postMessage({ t: 'fail', s: String(e) }));
 onmessage = async e => {
   await ready;
-  if (!py) return postMessage({ t: 'done', error: true });
+  if (!py) return postMessage(e.data.cmd === 'trace' ? { t: 'fail' } : { t: 'done', error: true });
+  if (e.data.cmd === 'trace') {   // 教學影片：記錄每一步
+    try {
+      const ns = py.globals.get('dict')();
+      ns.set('SRC', e.data.code); ns.set('INP', e.data.input);
+      py.runPython(e.data.tracer, { globals: ns });
+      postMessage({ t: 'trace', s: ns.get('RESULT') });
+      ns.destroy();
+    } catch (err) { postMessage({ t: 'trace', s: JSON.stringify({ steps: [], err: String(err.message || err), out: '' }) }); }
+    return;
+  }
   const lines = e.data.input === '' ? [] : e.data.input.split('\\n'); let i = 0;
   const dec = new TextDecoder(), dec2 = new TextDecoder();
   py.setStdout({ write: buf => { postMessage({ t: 'out', s: dec.decode(buf, { stream: true }) }); return buf.length; } });
@@ -2773,8 +2795,9 @@ function codeLab(back, lang, code, input) {
       </div>
       <div class="editor"><pre class="gutter"></pre><textarea class="code-ed" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">${esc(cur)}</textarea></div>
       <details class="lab-in" ${inp0 ? 'open' : ''}><summary>輸入資料（給 ${lang === 'python' ? 'input()' : 'input()／prompt()'} 用，一行一筆）</summary><textarea class="code-in" rows="3" spellcheck="false">${esc(inp0)}</textarea></details>
-      <div class="row lab-btns"><button class="btn primary big" data-run>執行（Ctrl＋Enter）</button><button class="btn" data-stop disabled>停止</button><button class="btn ghost" data-clear>清除輸出</button><span class="lab-status"></span></div>
-      <pre class="console"><span class="dim">按「執行」看結果</span></pre>
+      <div class="row lab-btns"><button class="btn primary big" data-run>執行（Ctrl＋Enter）</button><button class="btn" data-stop disabled>停止</button>${lang === 'python' ? '<button class="btn" data-step>一步一步看</button>' : ''}<button class="btn ghost" data-clear>清除輸出</button><span class="lab-status"></span></div>
+      <pre class="console"><span class="dim">按「執行」看結果；按「一步一步看」可以像影片一樣看程式每一行怎麼執行</span></pre>
+      <div class="lab-step"></div>
       <p class="note-s">程式在你的瀏覽器裡執行。${lang === 'python' ? 'Python 第一次使用要下載執行環境（約 10 MB），之後會快很多。' : ''}執行超過 ${RUN_LIMIT_MS / 1000} 秒會自動停止（避免無窮迴圈）。</p>
     </div>
     <div class="modes">${modeCard('guide', '', 'Python 完整教學', `${CODE_GUIDE.length} 章，全部語法介紹`)}${modeCard('know', '', '程式重點整理', '從運算思維到演算法')}${modeCard('quiz', '', '程式小測驗', '選擇題練習')}</div>`, back);
@@ -2834,6 +2857,15 @@ function codeLab(back, lang, code, input) {
   runBtn.onclick = run;
   stopBtn.onclick = () => { killRunner(lang); write('\n已手動停止。\n', 'err'); status.textContent = '已停止'; finish(); };
   $('[data-clear]').onclick = () => { out.innerHTML = ''; };
+  const stepBtn = $('[data-step]');
+  if (stepBtn) stepBtn.onclick = () => {
+    if (running) return toast('程式執行中，等它結束再看');
+    save();
+    const host = $('.lab-step');
+    host.innerHTML = '';
+    codeStepper(host, ed.value, { input: inEl.value.replace(/\r/g, '') });
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   $$('[data-lang]').forEach(b => b.onclick = () => { save(); const s = store.get('code', {}); s.lang = b.dataset.lang; store.set('code', s); codeLab(back, b.dataset.lang); });
   $('.lab-ex').onchange = e => {
     const ex = CODE_EXAMPLES[lang][+e.target.value]; if (!ex) return;
@@ -2877,6 +2909,220 @@ function codeGuide(back, q = '', openIdx = -1) {
     codeLab(() => codeGuide(back, q, c.i), c.lang || 'python', c.code, c.input || '');
   });
   if (openIdx >= 0 && !kw) setTimeout(() => openCh(openIdx), 50);
+}
+
+/* =========================================================
+   程式教學影片：把 Python 程式一步一步執行，記錄每一步的行號、變數、輸出，再像影片一樣播放
+   ========================================================= */
+const TRACE_PY = String.raw`
+import sys, io, json, builtins
+_steps = []
+_out = io.StringIO()
+_lines = INP.split("\n") if INP else []
+_pos = [0]
+def _input(prompt=""):
+    _out.write(str(prompt))
+    if _pos[0] >= len(_lines):
+        raise EOFError("EOF when reading a line")
+    v = _lines[_pos[0]]
+    _pos[0] += 1
+    _out.write(v + "\n")
+    return v
+def _snap(frame):
+    d = {}
+    for k, v in list(frame.f_locals.items()):
+        if k.startswith("_") or k in ("input",):
+            continue
+        t = type(v).__name__
+        if t in ("function", "module", "type", "builtin_function_or_method", "method"):
+            continue
+        try:
+            r = repr(v)
+        except Exception:
+            r = "?"
+        d[k] = r if len(r) <= 60 else r[:57] + "..."
+    return d
+def _depth(frame):
+    n = 0
+    while frame is not None:
+        if frame.f_code.co_filename == "<student>":
+            n += 1
+        frame = frame.f_back
+    return n
+def _tracer(frame, event, arg):
+    if frame.f_code.co_filename != "<student>":
+        return None
+    if event in ("call", "line", "return"):
+        if len(_steps) >= 400:
+            raise RuntimeError("步驟太多，只顯示前 400 步")
+        st = {"line": frame.f_lineno, "ev": event, "fn": frame.f_code.co_name, "depth": _depth(frame), "vars": _snap(frame), "out": _out.getvalue()}
+        if event == "return":
+            try:
+                st["ret"] = repr(arg)[:60]
+            except Exception:
+                st["ret"] = "?"
+        _steps.append(st)
+    return _tracer
+_err = None
+_real_out = sys.stdout
+try:
+    _code = compile(SRC, "<student>", "exec")
+    _g = {"__name__": "__main__", "input": _input}
+    sys.stdout = _out
+    sys.settrace(_tracer)
+    try:
+        exec(_code, _g)
+    finally:
+        sys.settrace(None)
+        sys.stdout = _real_out
+except Exception as e:
+    _err = type(e).__name__ + ": " + str(e)
+RESULT = json.dumps({"steps": _steps, "err": _err, "out": _out.getvalue()}, ensure_ascii=False)
+`;
+
+/** 請 Python 執行環境記錄每一步，回傳 {steps, err, out} */
+function traceRun(code, input) {
+  return new Promise((ok, fail) => {
+    const r = getRunner('python');
+    const prev = r.handler;
+    const timer = setTimeout(() => { killRunner('python'); fail(new Error('timeout')); }, 60000);
+    r.handler = m => {
+      if (m.t === 'trace') { clearTimeout(timer); r.handler = prev; try { ok(JSON.parse(m.s)); } catch (e) { fail(e); } }
+      else if (m.t === 'fail') { clearTimeout(timer); r.handler = prev; killRunner('python'); fail(new Error('load')); }
+    };
+    r.w.postMessage({ cmd: 'trace', code, input: input || '', tracer: TRACE_PY });
+  });
+}
+
+/** 每一步的中文解說 */
+function narrateStep(steps, i, lines) {
+  const s = steps[i];
+  const codeOf = n => (lines[n - 1] || '').trim();
+  const parts = [];
+  // 找同一層（同一個函式呼叫）的上一步，比較變數變化
+  let p = null;
+  for (let k = i - 1; k >= 0; k--) { if (steps[k].depth === s.depth) { p = steps[k]; break; } if (steps[k].depth < s.depth) break; }
+  if (p && p.ev === 'line') {
+    const ch = [];
+    for (const [k, v] of Object.entries(s.vars)) {
+      if (!(k in p.vars)) ch.push(`建立變數 ${k} = ${v}`);
+      else if (p.vars[k] !== v) ch.push(`${k} 從 ${p.vars[k]} 變成 ${v}`);
+    }
+    const pc = codeOf(p.line), next1 = s.ev === 'line' && s.line === p.line + 1;
+    let what = '';
+    let m;
+    if ((m = pc.match(/^def\s+(\w+)/))) what = `定義了函式 ${m[1]}（先記住，被呼叫時才會執行裡面的程式）`;
+    else if ((m = pc.match(/^class\s+(\w+)/))) what = `定義了類別 ${m[1]}`;
+    else if (/^(if|elif)\b/.test(pc) && s.ev === 'line') what = next1 ? '條件成立（True），執行底下縮排的程式' : '條件不成立（False），跳過底下的程式';
+    else if (/^while\b/.test(pc) && s.ev === 'line') what = next1 ? '條件成立，進入迴圈' : '條件不成立，迴圈結束';
+    else if (/^for\b/.test(pc) && s.ev === 'line') what = next1 ? '進入迴圈，拿出下一個值' : '迴圈跑完了，離開迴圈';
+    const detail = [what, ...ch].filter(Boolean);
+    parts.push(`第 ${p.line} 行「${pc}」執行完${detail.length ? '：' + detail.join('；') : '。'}`);
+  }
+  const prevOut = i > 0 ? steps[i - 1].out : '';
+  if (s.out.length > prevOut.length) {
+    const added = s.out.slice(prevOut.length).replace(/\n$/, '');
+    if (added) parts.push(`螢幕印出「${added.replace(/\n/g, '／')}」`);
+  }
+  if (s.ev === 'call' && s.fn !== '<module>') {
+    const args = Object.entries(s.vars).map(([k, v]) => `${k}=${v}`).join('、');
+    parts.push(`呼叫函式 ${s.fn}(${args})，跳進函式裡執行（第 ${s.depth - 1} 層）。`);
+  } else if (s.ev === 'call') parts.push('程式開始執行，從第一行往下跑。');
+  if (s.ev === 'return' && s.fn !== '<module>') parts.push(`函式 ${s.fn} 結束，回傳 ${s.ret}，回到呼叫它的地方。`);
+  if (s.ev === 'return' && s.fn === '<module>') parts.push('程式執行完畢！');
+  if (s.ev === 'line') parts.push(`接下來執行第 ${s.line} 行：${codeOf(s.line)}`);
+  return parts.map(x => (/[。！？]$/.test(x) ? x : x + '。')).join('');
+}
+
+/** 教學影片播放器 */
+function codeStepper(host, code, o = {}) {
+  const box = document.createElement('div');
+  box.className = 'stepper';
+  const lines = code.split('\n');
+  box.innerHTML = `${o.note ? `<div class="st-note"><b>觀念說明</b>${esc(o.note)}</div>` : ''}
+    <div class="st-status">正在準備教學影片…（第一次需要載入 Python，約 10 MB）</div>`;
+  host.appendChild(box);
+  let alive = true, timer = null;
+  onLeave(() => { alive = false; clearTimeout(timer); });
+  traceRun(code, o.input).then(res => {
+    if (!alive || !box.isConnected) return;
+    const steps = res.steps.filter(s => !(s.ev === 'call' && s.fn === '<module>' && s !== res.steps[0]));
+    if (!steps.length) { $('.st-status', box).textContent = res.err ? '程式有錯誤：' + res.err : '這段程式沒有可以播放的步驟。'; return; }
+    let i = 0, playing = false, voice = false;
+    $('.st-status', box).remove();
+    box.insertAdjacentHTML('beforeend', `
+      <div class="st-screen">
+        <div class="st-code">${lines.map((l, n) => `<div class="st-line" data-n="${n + 1}"><span class="st-no">${n + 1}</span><span class="st-mark"></span><code>${esc(l) || ' '}</code></div>`).join('')}</div>
+        <div class="st-side">
+          <div class="st-where"></div>
+          <table class="st-vars"><thead><tr><th>變數</th><th>值</th></tr></thead><tbody></tbody></table>
+          <div class="st-out-h">螢幕輸出</div><pre class="st-out"></pre>
+        </div>
+      </div>
+      <div class="st-say"></div>
+      <div class="st-ctrl">
+        <button class="mini" data-first>開頭</button><button class="mini" data-prev>上一步</button>
+        <button class="btn primary" data-play>播放</button>
+        <button class="mini" data-next>下一步</button><button class="mini" data-last>結尾</button>
+        <input type="range" class="st-bar" min="0" max="${steps.length - 1}" value="0">
+        <span class="st-count"></span>
+        <select class="st-speed"><option value="2600">慢</option><option value="1600" selected>中</option><option value="900">快</option></select>
+        <label class="st-voice"><input type="checkbox"> 語音解說</label>
+      </div>
+      ${res.err ? `<div class="st-err">這段程式最後出現錯誤：${esc(res.err)}</div>` : ''}`);
+    const playBtn = $('[data-play]', box), bar = $('.st-bar', box);
+    const show = n => {
+      i = Math.max(0, Math.min(steps.length - 1, n));
+      const s = steps[i];
+      let prevSame = null;
+      for (let k = i - 1; k >= 0; k--) if (steps[k].depth === s.depth) { prevSame = steps[k]; break; }
+      $$('.st-line', box).forEach(el => {
+        const n = +el.dataset.n;
+        el.classList.toggle('cur', s.ev === 'line' && n === s.line);
+        el.classList.toggle('done', !!prevSame && prevSame.ev === 'line' && n === prevSame.line && !(s.ev === 'line' && n === s.line));
+        el.classList.toggle('call', s.ev !== 'line' && n === s.line);
+      });
+      const curEl = $('.st-line.cur, .st-line.call', box);
+      if (curEl) { const c = $('.st-code', box); const top = curEl.offsetTop - c.clientHeight / 2; c.scrollTo({ top: Math.max(0, top), behavior: 'smooth' }); }
+      $('.st-where', box).textContent = s.fn === '<module>' ? '目前在：主程式' : `目前在：函式 ${s.fn}（第 ${s.depth - 1} 層）`;
+      const pv = prevSame ? prevSame.vars : {};
+      $('.st-vars tbody', box).innerHTML = Object.entries(s.vars).map(([k, v]) => `<tr class="${!(k in pv) || pv[k] !== v ? 'chg' : ''}"><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="dim">（還沒有變數）</td></tr>';
+      $('.st-out', box).textContent = s.out;
+      $('.st-out', box).scrollTop = 1e9;
+      const say = narrateStep(steps, i, lines);
+      $('.st-say', box).textContent = say;
+      bar.value = i;
+      $('.st-count', box).textContent = `${i + 1} / ${steps.length}`;
+      if (voice && playing) speakZh(say.replace(/「|」/g, ''));
+    };
+    const stop = () => { playing = false; clearTimeout(timer); playBtn.textContent = '播放'; };
+    const tick = () => {
+      if (!playing || !alive) return;
+      if (i >= steps.length - 1) { stop(); return; }
+      show(i + 1);
+      const wait = +$('.st-speed', box).value + (voice ? Math.min(4000, $('.st-say', box).textContent.length * 120) : 0);
+      timer = setTimeout(tick, wait);
+    };
+    playBtn.onclick = () => {
+      if (playing) return stop();
+      if (i >= steps.length - 1) show(0);
+      playing = true; playBtn.textContent = '暫停';
+      if (voice) speakZh($('.st-say', box).textContent.replace(/「|」/g, ''));
+      timer = setTimeout(tick, +$('.st-speed', box).value);
+    };
+    $('[data-prev]', box).onclick = () => { stop(); show(i - 1); };
+    $('[data-next]', box).onclick = () => { stop(); show(i + 1); };
+    $('[data-first]', box).onclick = () => { stop(); show(0); };
+    $('[data-last]', box).onclick = () => { stop(); show(steps.length - 1); };
+    bar.oninput = () => { stop(); show(+bar.value); };
+    $('.st-voice input', box).onchange = e => { voice = e.target.checked; if (!voice) stopSpeech(); };
+    show(0);
+    if (o.autoplay) playBtn.click();
+  }).catch(e => {
+    const st = $('.st-status', box);
+    if (st) st.textContent = e.message === 'timeout' ? '準備太久了，請稍後再試。' : '教學影片載入失敗，請確認網路連線（需要下載 Python 執行環境）。';
+  });
+  return box;
 }
 
 /* ---------- 開始 ---------- */

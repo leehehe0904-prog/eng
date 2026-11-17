@@ -737,3 +737,42 @@ body {
 .console .dim { color: #6c7a89; font-family: 'Noto Sans TC', sans-serif; }
 .k-code { background: #1e2430; color: #e9ecef; border-radius: 12px; padding: 12px 14px; font: 14px/1.55 Consolas, 'Courier New', monospace; overflow-x: auto; white-space: pre; }
 .console .in { color: #74c0fc; }
+
+/* ---------- 程式教學影片（一步一步執行） ---------- */
+details.demo { margin-top: 14px; border: 2px solid #96f2d7; border-radius: 14px; background: #f3fdf9; text-align: left; }
+details.demo > summary { cursor: pointer; padding: 10px 14px; font-weight: 800; color: #087f5b; }
+details.demo[open] > summary { border-bottom: 1px solid #c3fae8; }
+.stepper { padding: 12px; text-align: left; }
+.lab-step .stepper { margin-top: 12px; border: 2px solid #96f2d7; border-radius: 14px; background: #f3fdf9; }
+.st-note { background: #fff; border-left: 5px solid #0ca678; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 16px; }
+.st-note b { display: block; color: #087f5b; }
+.st-status { color: var(--muted); padding: 8px; }
+.st-screen { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
+.st-code { background: #1e2430; border-radius: 12px; padding: 8px 0; max-height: 300px; overflow: auto; position: relative; }
+.st-line { display: flex; align-items: center; font: 15px/1.7 Consolas, 'Courier New', monospace; color: #ced4da; white-space: pre; padding-right: 10px; transition: background .2s; }
+.st-line code { font: inherit; }
+.st-no { width: 34px; text-align: right; color: #6c7a89; margin-right: 6px; flex-shrink: 0; }
+.st-mark { width: 18px; flex-shrink: 0; text-align: center; }
+.st-line.cur { background: #5c4b00; color: #fff; }
+.st-line.cur .st-mark::before { content: '▸'; color: #ffd43b; }
+.st-line.call { background: #1c3d5a; color: #fff; }
+.st-line.call .st-mark::before { content: '▸'; color: #74c0fc; }
+.st-line.done { background: #1b3a2a; }
+.st-line.done .st-mark::before { content: '✓'; color: #69db7c; font-size: 12px; }
+.st-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.st-where { font-weight: 800; color: #5f3dc4; font-size: 14px; }
+.st-vars { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; font-size: 14px; }
+.st-vars th { background: #e6fcf5; color: #087f5b; text-align: left; padding: 4px 8px; }
+.st-vars td { padding: 4px 8px; border-top: 1px solid #e9ecef; font-family: Consolas, monospace; word-break: break-all; }
+.st-vars tr.chg td { background: #fff3bf; font-weight: 700; }
+.st-vars .dim { color: var(--muted); font-family: inherit; }
+.st-out-h { font-size: 13px; font-weight: 700; color: var(--muted); }
+.st-out { margin: 0; min-height: 60px; max-height: 140px; overflow: auto; background: #0b0f14; color: #d3f9d8; border-radius: 10px; padding: 8px 10px; font: 14px/1.5 Consolas, monospace; white-space: pre-wrap; }
+.st-say { margin-top: 10px; background: #fff; border: 2px solid #ffe066; border-radius: 12px; padding: 10px 14px; font-size: 17px; line-height: 1.6; min-height: 52px; }
+.st-ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.st-bar { flex: 1; min-width: 120px; accent-color: #0ca678; }
+.st-count { font-size: 13px; color: var(--muted); min-width: 52px; }
+.st-speed { padding: 3px 6px; border-radius: 8px; border: 2px solid var(--line); font: inherit; font-size: 14px; }
+.st-voice { font-size: 14px; display: flex; align-items: center; gap: 4px; }
+.st-err { margin-top: 8px; color: #c92a2a; font-weight: 700; }
+@media (max-width: 640px) { .st-screen { grid-template-columns: 1fr; } }

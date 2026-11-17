@@ -476,3 +476,57 @@ const CODE_EXAMPLES = {
     { lv: '高中', title: '物件與排序', code: 'const students = [\n  { name: "Amy", score: 88 },\n  { name: "Ben", score: 95 },\n  { name: "Cat", score: 76 },\n];\nstudents.sort((a, b) => b.score - a.score);\nstudents.forEach((s, i) => console.log(i + 1, s.name, s.score));' },
   ],
 };
+
+// 每一題程式選擇題的「教學影片」：一段小程式（會一步一步執行）＋說明。順序和 MCQ.code 一一對應
+const CODE_DEMO = {
+  e1: [
+    { note: '程式就是一步一步的指令，電腦會從第一行開始，照順序一行一行做。', code: 'print("起床")\nprint("刷牙")\nprint("吃早餐")\nprint("出門上學")' },
+    { note: '順序：指令照順序執行，順序錯了，結果就不對。', code: 'print("1. 拿牙刷")\nprint("2. 擠牙膏")\nprint("3. 刷牙")\nprint("4. 漱口")' },
+    { note: '重複（迴圈）：for 會讓同一段程式做很多次，看看 i 怎麼從 1 變到 10。', code: 'for i in range(1, 11):\n    print("跳第", i, "下")\nprint("跳完了！")' },
+    { note: '條件：if 會判斷條件有沒有成立，再決定要做哪一邊。試著想想 rain 改成 False 會怎樣？', code: 'rain = True\nif rain:\n    print("帶雨傘")\nelse:\n    print("戴帽子")' },
+    { note: '除錯就是一步一步看程式怎麼執行、變數怎麼變化，找出哪裡和你想的不一樣。這個教學影片就是一種除錯的方法！', code: 'apples = 5\neat = 2\nleft = apples - eat\nprint("剩下", left, "顆")' },
+    { note: '先用迴圈前進 3 次，迴圈結束後才左轉，順序很重要。', code: 'for step in range(3):\n    print("前進")\nprint("左轉")' },
+    { note: '鍵盤把資料「輸入」電腦（input），程式處理後，再用螢幕「輸出」（print）。', code: 'name = input()\nprint("你好，" + name)', input: 'Amy' },
+    { note: '螢幕是輸出裝置：程式算出結果後，用 print 顯示在螢幕上。', code: 'score = 90 + 5\nprint("分數是", score)' },
+  ],
+  e2: [
+    { note: '事件：當綠旗被點擊時，才開始執行裡面的程式。在 Python 裡，就像「呼叫一個函式」。', code: 'def when_green_flag_clicked():\n    print("貓咪：哈囉！")\n    print("貓咪往前走 10 步")\n\nwhen_green_flag_clicked()' },
+    { note: '「重複無限次」會一直做；這裡用重複 6 次來示範，觀察 x 每次都加 10。', code: 'x = 0\nfor t in range(6):\n    x += 10\n    print("角色走到 x =", x)' },
+    { note: '變數像一個貼了名字的盒子，可以存放會改變的數值，例如分數。', code: 'score = 0\nscore += 1\nscore += 1\nscore += 5\nprint("分數：", score)' },
+    { note: '「如果碰到邊緣」是條件判斷：條件成立時，把速度變成相反方向，角色就反彈了。', code: 'x = 220\nspeed = 10\nfor t in range(5):\n    x += speed\n    if x >= 240:\n        speed = -speed\n        print("碰到邊緣，反彈！")\n    print("x =", x)' },
+    { note: '一個角色可以有很多造型，快速一張一張換，看起來就像動畫。', code: 'costumes = ["走路1", "走路2", "走路3"]\nfor c in costumes:\n    print("換成造型：", c)' },
+    { note: '每次轉 90 度，轉 4 次剛好轉一圈 360 度，畫出正方形。', code: 'angle = 0\nfor i in range(4):\n    print("移動 100 點，面向", angle, "度")\n    angle += 90\nprint("一共轉了", angle, "度 → 正方形")' },
+    { note: '每次轉 120 度，轉 3 次剛好 360 度，畫出正三角形。', code: 'angle = 0\nfor i in range(3):\n    print("移動 100 點，面向", angle, "度")\n    angle += 120\nprint("一共轉了", angle, "度 → 正三角形")' },
+    { note: '廣播一個訊息，收到訊息的角色會各自開始動作。', code: 'def cat_receive(msg):\n    print("貓收到：", msg, "→ 開始跳舞")\n\ndef dog_receive(msg):\n    print("狗收到：", msg, "→ 開始唱歌")\n\nmessage = "開始表演"\ncat_receive(message)\ndog_receive(message)' },
+  ],
+  e3: [
+    { note: 'print() 會把括號裡的東西顯示在螢幕上，可以是文字，也可以是算出來的數字。', code: 'print("Hello")\nprint(1 + 2)\nprint("答案是", 3)' },
+    { note: '先乘除後加減：先算 4 * 2 = 8，再算 3 + 8 = 11。', code: 'a = 4 * 2\nprint("先算乘法：4 * 2 =", a)\nb = 3 + a\nprint("再算加法：3 +", a, "=", b)\nprint(3 + 4 * 2)' },
+    { note: '// 是「整數除法」，只留下商；% 是餘數。7 ÷ 2 = 3 餘 1。', code: 'q = 7 // 2\nr = 7 % 2\nprint("7 // 2 =", q)\nprint("7 % 2 =", r)\nprint("驗算：", q, "* 2 +", r, "=", q * 2 + r)' },
+    { note: '% 取餘數：n % 2 是 0 代表偶數，是 1 代表奇數。', code: 'for n in range(1, 8):\n    print(n, "% 2 =", n % 2)' },
+    { note: '** 是次方：2 ** 3 就是 2 × 2 × 2，看看 result 怎麼一次乘一個 2。', code: 'result = 1\nfor i in range(3):\n    result = result * 2\nprint("2 ** 3 =", result)' },
+    { note: '# 開頭的是註解，執行時會直接跳過。注意看：亮起來的行不會停在註解上。', code: '# 這一行是註解，不會執行\nprint("我會被執行")\n# print("我不會被執行")\nprint("註解只是給人看的")' },
+    { note: 'input() 讀進來的一定是字串（str），要用 int() 轉成整數才能做數學。', code: 'x = input()\nprint(type(x))\nn = int(x)\nprint(type(n), n + 1)', input: '41' },
+    { note: '字串相加是把字接起來，數字相加才是做加法。', code: 'a = "3" + "4"\nb = 3 + 4\nprint(a)\nprint(b)' },
+  ],
+  jh: [
+    { note: '= 是「把值放進變數」，== 是「比較是否相等」，結果是 True 或 False；!= 是不相等。', code: 'x = 5\nprint(x == 5)\nprint(x == 3)\nprint(x != 3)\nx = 3\nprint(x == 3)' },
+    { note: 'range(5) 從 0 開始數，到 5「之前」就停，所以是 0～4，一共 5 個。', code: 'for i in range(5):\n    print(i)\nprint(list(range(5)))' },
+    { note: '串列的索引從 0 開始：a[0] 是第一個、a[1] 是第二個，a[-1] 是最後一個。', code: 'a = [10, 20, 30]\nfirst = a[0]\nsecond = a[1]\nlast = a[-1]\nprint(first, second, last)' },
+    { note: 'len() 算出串列裡有幾個元素，就像用迴圈一個一個數。', code: 'nums = [3, 5, 7, 9]\ncount = 0\nfor n in nums:\n    count += 1\nprint(count, len(nums))' },
+    { note: 'Python 用縮排表示區塊：縮排的兩行屬於 if，沒縮排的那行不管條件如何都會執行。', code: 'score = 75\nif score >= 60:\n    print("及格")\n    print("繼續加油")\nprint("這行沒縮排，一定會執行")' },
+    { note: 'def 定義函式，呼叫時程式會跳進函式裡執行，return 把結果帶回來。', code: 'def double(n):\n    result = n * 2\n    return result\n\nx = double(4)\ny = double(10)\nprint(x, y)' },
+    { note: 'while 條件成立就一直重複；count 每次減 1，最後變成 0，條件不成立就停止。如果忘了減 1，就會變成無窮迴圈。', code: 'count = 3\nwhile count > 0:\n    print("倒數", count)\n    count -= 1\nprint("count 變成 0，迴圈結束")' },
+    { note: 'and：兩個條件都要成立，結果才是 True。', code: 'x = 15\na = x > 10\nb = x < 20\nprint(a, b, a and b)' },
+  ],
+  sh: [
+    { note: '二分搜尋每次看中間那個，比目標小就丟掉左半邊、比較大就丟掉右半邊，所以資料一定要先排好。', code: 'data = [1, 3, 5, 7, 9, 11, 13]\ntarget = 11\nlo, hi = 0, len(data) - 1\nwhile lo <= hi:\n    mid = (lo + hi) // 2\n    if data[mid] == target:\n        print("找到了，在索引", mid)\n        break\n    elif data[mid] < target:\n        lo = mid + 1\n    else:\n        hi = mid - 1' },
+    { note: '64 個資料，每次排除一半：64 → 32 → 16 → 8 → 4 → 2 → 1，最多大約 6 次，這就是 O(log n)。', code: 'data = list(range(1, 65))\ntarget = 50\nlo, hi, steps = 0, len(data) - 1, 0\nwhile lo <= hi:\n    mid = (lo + hi) // 2\n    steps += 1\n    if data[mid] == target:\n        break\n    elif data[mid] < target:\n        lo = mid + 1\n    else:\n        hi = mid - 1\nprint("64 個資料只找了", steps, "次")' },
+    { note: '氣泡排序：兩層迴圈，相鄰的兩個比較，比較大的往後換。注意看 nums 每一步怎麼變。', code: 'nums = [4, 2, 3, 1]\nn = len(nums)\nfor i in range(n - 1):\n    for j in range(n - 1 - i):\n        if nums[j] > nums[j + 1]:\n            nums[j], nums[j + 1] = nums[j + 1], nums[j]\nprint(nums)' },
+    { note: '遞迴：函式呼叫自己，n 每次減 1；n == 0 就是終止條件，沒有它就會一直呼叫下去。', code: 'def countdown(n):\n    if n == 0:\n        print("發射！")\n        return\n    print(n)\n    countdown(n - 1)\n\ncountdown(3)' },
+    { note: '切片 s[0:3] 拿索引 0、1、2，不包含 3。', code: 's = "Python"\nprint(s[0], s[1], s[2])\npart = s[0:3]\nprint(part)' },
+    { note: '字典用「鍵」取「值」：d["b"] 拿到 2；也可以新增新的鍵。', code: 'd = {"a": 1, "b": 2}\nd["c"] = 3\nvalue = d["b"]\nprint(value, d)' },
+    { note: '費氏數列：每一項是前兩項相加。看 a、b 怎麼一路往前推。', code: 'a, b = 0, 1\nfor i in range(6):\n    a, b = b, a + b\n    print("fib(", i + 1, ") =", a)' },
+    { note: '不會改變的值（像 JavaScript 的 const），Python 習慣用大寫命名；會改變的就是一般變數（像 let）。', code: 'PI = 3.14159\nr = 2\nr = 3\nprint(PI * r * r)' },
+  ],
+};
