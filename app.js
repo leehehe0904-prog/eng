@@ -1842,7 +1842,7 @@ function profilePage(back, editId) {
       <label>年齡（會用來挑選適合的時事話題和 AI 說話難度）<select data-age><option value="">請選擇</option>${Array.from({ length: 55 }, (_, i) => i + 6).map(a => `<option value="${a}" ${+ed.age === a ? 'selected' : ''}>${a} 歲</option>`).join('')}</select></label>
       <label>縣市<select data-city><option value="">（不填）</option>${COUNTIES.map(([c]) => `<option ${ed.city === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
       <label>學校階段（首頁會自動切到這個階段）<select data-stage>${LEVELS.map(l => `<option value="${l.id}" ${(ed.stage || (ed.age ? levelForAge(+ed.age) : 'elem')) === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}</select></label>
-      <label>學校（先選縣市，再打學校名稱的一部分，例如「中正」）<input class="type-in" data-school list="school-list" value="${esc(ed.school || '')}" placeholder="輸入或從清單選擇學校" autocomplete="off"><datalist id="school-list"></datalist></label>
+      <label>學校（打學校名稱的一部分，例如「文聖」，再從清單選）<input class="type-in" data-school list="school-list" value="${esc(ed.school || '')}" placeholder="輸入或從清單選擇學校" autocomplete="off"><datalist id="school-list"></datalist></label>
       <p class="note-s school-count"></p>
       <div class="row"><button class="btn primary" data-save>儲存並登入</button>${ed.id ? '<button class="btn ghost" data-del>刪除這個學生</button>' : ''}</div>
     </div>` : ''}`, back);
@@ -1856,11 +1856,20 @@ function profilePage(back, editId) {
   const fillSchools = () => loadSchools().then(S => {
     const k = { elem: 'e', jh: 'j', sh: 'h', uni: 'u' }[$('[data-stage]').value];
     const city = $('[data-city]').value;
-    const names = city ? (S[k][city] || []) : Object.values(S[k]).flat();
-    $('#school-list').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
-    $('.school-count').textContent = city ? `${city}共有 ${names.length} 所${LEVELS.find(l => l.id === $('[data-stage]').value).name}可以選（資料：教育部各級學校名錄）` : '先選縣市，學校清單會比較短、比較好找。';
+    // 全台的學校都可以搜尋，選的縣市排在最前面；每所學校後面附上縣市和鄉鎮區，避免同名學校搞混
+    const all = Object.entries(S[k]).flatMap(([c, arr]) => arr.map(x => { const [n, d] = x.split('|'); return { n, c, d: d || '' }; }));
+    const mine = all.filter(x => x.c === city);
+    const list = city ? [...mine, ...all.filter(x => x.c !== city)] : all;
+    $('#school-list').innerHTML = list.map(x => `<option value="${esc(`${x.n}（${x.c}${x.d}）`)}">`).join('');
+    const stageName = LEVELS.find(l => l.id === $('[data-stage]').value).name;
+    $('.school-count').textContent = `全台共有 ${all.length} 所${stageName}${city ? `（${city} ${mine.length} 所）` : ''}，輸入學校名稱的一部分就能找到，其他縣市的學校也可以（資料：教育部各級學校名錄）`;
   }).catch(() => { $('.school-count').textContent = '學校清單載入失敗，可以直接打學校名稱。'; });
   $('[data-city]').onchange = fillSchools;
+  // 選了別的縣市的學校，就自動把縣市換過去
+  $('[data-school]').onchange = () => {
+    const m = $('[data-school]').value.match(/（(.{2}[縣市])/);
+    if (m && COUNTIES.some(c => c[0] === m[1]) && $('[data-city]').value !== m[1]) { $('[data-city]').value = m[1]; fillSchools(); }
+  };
   $('[data-stage]').onchange = () => { stageTouched = true; fillSchools(); };
   $('[data-age]').onchange = () => { if (!stageTouched && +$('[data-age]').value) { $('[data-stage]').value = levelForAge(+$('[data-age]').value); fillSchools(); } };
   fillSchools();
