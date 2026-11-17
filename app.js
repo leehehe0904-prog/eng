@@ -758,7 +758,7 @@ Object.assign(Q, {
       const rev = q.ex ? { head: '參考句子：', en: q.ex.en, zh: q.ex.zh } : { head: '照上面的提示改一改就更好了', en: '', say: false };
       hintLadder(el, [
         () => `好句子的樣子：<b>大寫開頭</b>、有用到 <b>${esc(w.en)}</b>、<b>3 個字以上</b>、最後加 <b>. ? !</b>`,
-        () => `例如：<b>I like ${esc(w.en)}.</b>　<b>This is my ${esc(w.en)}.</b>　<b>It is ${esc(w.en)}.</b>（選最通順的改一改）`,
+        () => `例如：<b>I like ${esc(w.en)}.</b><b>This is my ${esc(w.en)}.</b><b>It is ${esc(w.en)}.</b>（選最通順的改一改）`,
         ...(q.ex ? [() => `參考句子：<b>${esc(q.ex.en)}</b> <small>${esc(q.ex.zh)}</small>`] : []),
       ]);
       typeAnswer(el, v => checkWriting(v, [w.en]).every(c => c.ok), done, rev, {
@@ -1095,6 +1095,21 @@ function chatUI(title, back) {
       inp.placeholder = h ? h.pat.split(' / ')[0] : '用英文回答…';
     },
     onSend(f) { handler = f; },
+    /** 顯示「Robo 正在想…」，回傳移除用的函式 */
+    typing() {
+      const d = document.createElement('div');
+      d.className = 'msg ai typing';
+      d.innerHTML = '<span class="av bot">Robo</span><div class="bub"><span class="dots"><i></i><i></i><i></i></span> 正在想…</div>';
+      msgs.appendChild(d); scroll();
+      return () => d.remove();
+    },
+    /** 在對話框上方放一個資訊面板 */
+    panel() {
+      const p = document.createElement('div');
+      p.className = 'ai-panel';
+      msgs.before(p);
+      return p;
+    },
     end(html) {
       chips.innerHTML = ''; form.remove();
       const d = document.createElement('div'); d.className = 'chat-end'; d.innerHTML = html;
@@ -1183,17 +1198,142 @@ function botReply(raw, st) {
   if (/^(hi|hello|hey)\b/.test(t)) return ['Hello! Nice to see you!', '哈囉！很高興見到你！', true];
   return [pick(["That's interesting!", 'Wow, really?', 'I see!', 'Cool!']), '真有趣！', true];
 }
+/* ---------- 真正的 AI 聊天：WebLLM 在瀏覽器裡用顯示卡跑開源模型（免費、不用金鑰） ---------- */
+const WEBLLM_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.87/+esm';
+const AI_MODELS = [
+  { id: 'Qwen2.5-1.5B-Instruct', name: '標準（建議）', size: '約 1 GB' },
+  { id: 'Qwen2.5-0.5B-Instruct', name: '輕量（舊電腦用）', size: '約 0.4 GB' },
+  { id: 'Qwen2.5-3B-Instruct', name: '比較聰明（較慢）', size: '約 2 GB' },
+];
+const AI = { engine: null, model: null, loading: null };
+const AI_SYSTEM = `You are Robo, a friendly robot who chats in English with a child in Taiwan (age 7-12) who is learning English.
+Rules:
+- Read what the child just said and reply to THAT. Stay on the child's topic. Never ignore what they said.
+- Use very simple English (beginner level). 1 or 2 short sentences, no more than 25 words.
+- End with ONE easy question so the child can keep talking about the same topic.
+- If the child's English has a mistake, first show the correct sentence kindly, like: You can say "I went to the park."
+- If the child writes Chinese, reply in simple English and show how to say it in English.
+- Be kind, positive and safe for children. Do not use emoji.
+Always answer in exactly this format (three lines):
+EN: your English reply
+ZH: the same reply in Traditional Chinese (繁體中文)
+TRY: one short, easy example answer the child could say next`;
+
+async function getGPU() {
+  if (!navigator.gpu) return null;
+  try { return await navigator.gpu.requestAdapter(); } catch (e) { return null; }
+}
+async function loadAI(base, onProgress) {
+  if (AI.engine && AI.model === base) return AI.engine;
+  if (AI.loading) return AI.loading;
+  AI.loading = (async () => {
+    const gpu = await getGPU();
+    if (!gpu) throw new Error('nogpu');
+    const id = `${base}-${gpu.features.has('shader-f16') ? 'q4f16_1' : 'q4f32_1'}-MLC`;
+    const webllm = await import(WEBLLM_URL);
+    if (AI.engine) { try { await AI.engine.unload(); } catch (e) { } AI.engine = null; }
+    AI.engine = await webllm.CreateMLCEngine(id, { initProgressCallback: r => onProgress && onProgress(r) });
+    AI.model = base;
+    return AI.engine;
+  })();
+  try { return await AI.loading; } finally { AI.loading = null; }
+}
+function parseAI(raw) {
+  const get = k => { const m = raw.match(new RegExp(`^\\s*${k}\\s*[:：]\\s*(.+)$`, 'mi')); return m ? m[1].trim() : ''; };
+  let en = get('EN'), zh = get('ZH'), tryIt = get('TRY');
+  if (!en) en = raw.replace(/^\s*(ZH|TRY)\s*[:：].*$/gmi, '').trim();
+  const clean = s => s.replace(/\p{Extended_Pictographic}|️/gu, '').replace(/^["“]|["”]$/g, '').trim();
+  return { en: clean(en).slice(0, 300), zh: clean(zh), tryIt: clean(tryIt) };
+}
+
 function freeChat(back) {
   const ui = chatUI('自由聊天', back);
   const st = { name: null, order: shuffle(BOT_QUESTIONS), qi: 0 };
+  const history = [];
+  let busy = false, alive = true;
+  onLeave(() => { alive = false; });
   const nextQ = () => {
     const q = st.order[st.qi++ % st.order.length];
     ui.ai(q[0], q[1]); ui.chips(q[2], hintFor(q[0]));
+    history.push({ role: 'assistant', content: `EN: ${q[0]}\nZH: ${q[1]}\nTRY: ${q[2][0]}` });
   };
-  ui.ai("Hi! I'm Robo . Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
+
+  // ---- AI 面板 ----
+  const panel = ui.panel();
+  const pref = store.get('ai', { model: AI_MODELS[0].id, auto: false });
+  const ready = () => AI.engine && AI.model;
+  const drawPanel = (state, extra = '') => {
+    if (state === 'on') {
+      panel.className = 'ai-panel on';
+      panel.innerHTML = `<b>AI 大腦已開啟</b>Robo 會依照你說的話回答你（${esc(AI_MODELS.find(m => m.id === AI.model)?.name || '')}）`;
+    } else if (state === 'loading') {
+      panel.className = 'ai-panel';
+      panel.innerHTML = `<b>正在啟動 AI 大腦…</b><div class="ai-bar"><div style="width:${extra.pct || 0}%"></div></div><small>${esc(extra.text || '')}</small><small>第一次要下載模型，請保持網路連線；下載完會存在電腦裡，下次就很快。</small>`;
+    } else if (state === 'nogpu') {
+      panel.className = 'ai-panel off';
+      panel.innerHTML = '<b>這台電腦或瀏覽器不能開 AI 大腦</b>需要電腦版 Chrome 或 Edge（支援 WebGPU）。先用簡單版 Robo 聊天吧！';
+    } else {
+      panel.className = 'ai-panel';
+      panel.innerHTML = `<b>想讓 Robo 真的聽懂你說的話嗎？</b>開啟免費的 AI 大腦，它會跟著你說的內容回答。
+        ${extra ? `<div class="r">${esc(extra)}</div>` : ''}
+        <div class="row"><select data-model>${AI_MODELS.map(m => `<option value="${m.id}" ${m.id === pref.model ? 'selected' : ''}>${m.name}・${m.size}</option>`).join('')}</select>
+        <button class="btn primary" data-load>開啟 AI 大腦</button></div>
+        <small>模型在你的電腦上執行，不用帳號、不用錢；第一次需要下載。手機通常跑不動。</small>`;
+      $('[data-load]', panel).onclick = () => start($('[data-model]', panel).value);
+    }
+  };
+  const start = async base => {
+    drawPanel('loading', { pct: 0, text: '' });
+    try {
+      await loadAI(base, r => { if (alive) drawPanel('loading', { pct: Math.round((r.progress || 0) * 100), text: r.text }); });
+      store.set('ai', { model: base, auto: true });
+      if (alive) { drawPanel('on'); toast('AI 大腦開啟了！跟 Robo 說說話吧'); }
+    } catch (e) {
+      if (!alive) return;
+      if (e.message === 'nogpu') drawPanel('nogpu');
+      else drawPanel('off', '啟動失敗：' + (e.message || e) + '（可以改選「輕量」再試一次）');
+    }
+  };
+  if (ready()) drawPanel('on');
+  else getGPU().then(g => {
+    if (!alive) return;
+    if (!g) drawPanel('nogpu');
+    else if (pref.auto) start(pref.model);   // 之前開過：自動從電腦裡的快取載入
+    else drawPanel('off');
+  });
+
+  ui.ai("Hi! I'm Robo. Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
   setTimeout(nextQ, 400);
-  ui.onSend((text, typed) => {
+
+  ui.onSend(async (text, typed) => {
+    if (busy) return;
     ui.me(text, typed);
+    if (ready()) {
+      busy = true;
+      const done = ui.typing();
+      history.push({ role: 'user', content: text });
+      try {
+        const r = await AI.engine.chat.completions.create({
+          messages: [{ role: 'system', content: AI_SYSTEM }, ...history.slice(-12)],
+          temperature: 0.7, max_tokens: 180,
+        });
+        const raw = r.choices[0].message.content || '';
+        history.push({ role: 'assistant', content: raw });
+        if (!alive) return;
+        done();
+        const a = parseAI(raw);
+        ui.ai(a.en || "Sorry, can you say that again?", a.zh);
+        ui.chips(a.tryIt ? [a.tryIt] : [], null);
+      } catch (e) {
+        history.pop();
+        if (!alive) return;
+        done();
+        const [en, zh] = botReply(text, st);
+        ui.ai(en, zh);
+      }
+      busy = false;
+      return;
+    }
     const [en, zh, more] = botReply(text, st);
     setTimeout(() => {
       ui.ai(en, zh);
