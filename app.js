@@ -273,7 +273,68 @@ function typeAnswer(el, check, done, rev, o = {}) {
   };
   b.onclick = go;
   inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  if (o.onInput) inp.oninput = () => o.onInput(inp.value);
 }
+
+/* ---------- 提示工具 ---------- */
+/** 字母格：打字時即時顯示對（綠）錯（紅），也可以一個一個揭曉字母 */
+function letterBoxes(el, word, revealed = 0) {
+  const d = document.createElement('div');
+  d.className = 'lboxes';
+  el.appendChild(d);
+  const st = { rev: revealed, v: '' };
+  const draw = () => {
+    d.innerHTML = word.split('').map((c, i) => {
+      const t = st.v[i];
+      if (t) return `<span class="lb ${t.toLowerCase() === c.toLowerCase() ? 'g' : 'r'}">${esc(t)}</span>`;
+      return `<span class="lb ${i < st.rev ? 'rev' : ''}">${i < st.rev ? esc(c) : ''}</span>`;
+    }).join('') + `<small>${word.length} 個字母</small>`;
+  };
+  draw();
+  return {
+    set(v) { st.v = v.trim(); draw(); },
+    reveal() { if (st.rev < word.length - 1) { st.rev++; draw(); return true; } return false; },
+  };
+}
+/** 拼字題的提示按鈕列 */
+function spellHints(el, w, lb, o = {}) {
+  const box = document.createElement('div');
+  box.className = 'hint-row';
+  box.innerHTML = `${o.sound ? `<button class="mini" data-say="${esc(w.en)}">🔊 聽發音</button>` : ''}
+    ${o.zh ? '<button class="mini" data-zhh>🀄 看中文</button>' : ''}
+    <button class="mini" data-more>🔤 多給一個字母</button>
+    <button class="mini" data-mix>🔀 打亂的字母</button>
+    <div class="hint-out"></div>`;
+  el.appendChild(box);
+  const out = $('.hint-out', box);
+  const zb = $('[data-zhh]', box);
+  if (zb) zb.onclick = () => { out.insertAdjacentHTML('beforeend', `<div class="hint-line">${w.emoji} ${esc(w.zh)}</div>`); zb.remove(); };
+  $('[data-more]', box).onclick = e => { if (!lb.reveal()) { toast('只剩最後一個字母，自己試試看！'); e.currentTarget.disabled = true; } };
+  $('[data-mix]', box).onclick = e => {
+    e.currentTarget.remove();
+    out.insertAdjacentHTML('beforeend', `<div class="hint-line">🔀 用這些字母拼：${shuffleDiff(w.en.split('')).map(c => `<button type="button" class="wchip letter">${esc(c)}</button>`).join('')}</div>`);
+    $$('.wchip.letter', out).forEach(c => c.onclick = () => {
+      const inp = $('.type-in', el); if (!inp || inp.disabled) return;
+      inp.value += c.textContent; inp.focus(); lb.set(inp.value);
+    });
+  };
+}
+/** 漸進式提示：每按一次多給一個提示。steps 是回傳 HTML 的函式 */
+function hintLadder(el, steps) {
+  if (!steps.length) return;
+  const box = document.createElement('div');
+  box.className = 'hint-row';
+  box.innerHTML = `<button type="button" class="mini hint-btn">💡 提示（共 ${steps.length} 個）</button><div class="hint-out"></div>`;
+  ($('.hl', el) || el).appendChild(box);
+  const btn = $('.hint-btn', box), out = $('.hint-out', box);
+  let i = 0;
+  btn.onclick = () => {
+    out.insertAdjacentHTML('beforeend', `<div class="hint-line">${steps[i++]()}</div>`);
+    if (i >= steps.length) btn.remove();
+    else btn.textContent = `💡 再一個提示（還有 ${steps.length - i} 個）`;
+  };
+}
+const firstHalf = s => { const t = s.split(/\s+/); return t.slice(0, Math.ceil(t.length / 2)).join(' ') + ' …'; };
 function shuffleDiff(a) {
   if (new Set(a).size < 2) return a.slice();
   let s, n = 0;
@@ -346,7 +407,8 @@ const Q = {
     label: '看圖選字',
     make(c) { if (c.words.length < 4) return null; const a = pick(c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">👀 這是什麼？選出正確的英文</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div>${optButtons(q.opts.map(o => esc(o.en)), 'words')}`;
+      el.innerHTML = `<p class="ask">👀 這是什麼？選出正確的英文</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(o => esc(o.en)), 'words')}`;
+      hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => { speak(q.a.en); return '🔊 聽聽看發音'; }]);
       bindOpts(el, q.opts.indexOf(q.a), done, wrev(q.a));
     },
   },
@@ -354,17 +416,21 @@ const Q = {
     label: '聽寫單字',
     make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✍️ 聽一聽，把單字拼出來</p>${sayBtns(q.a.en)}<p class="hint-letters">${'_ '.repeat(q.a.en.length)}（${q.a.en.length} 個字母）</p>`;
+      el.innerHTML = `<p class="ask">✍️ 聽一聽，把單字拼出來</p>${sayBtns(q.a.en)}`;
       setTimeout(() => speak(q.a.en), 350);
-      typeAnswer(el, v => v.trim().toLowerCase() === q.a.en.toLowerCase(), done, wrev(q.a));
+      const lb = letterBoxes(el, q.a.en, 0);
+      spellHints(el, q.a, lb, { zh: true });
+      typeAnswer(el, v => v.trim().toLowerCase() === q.a.en.toLowerCase(), done, wrev(q.a), { onInput: v => lb.set(v) });
     },
   },
   typeWord: {
     label: '看圖拼字',
     make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✍️ 看圖，寫出英文單字</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div><p class="hint-letters">${esc(q.a.en[0])} ${'_ '.repeat(q.a.en.length - 1)}（${q.a.en.length} 個字母）</p>`;
-      typeAnswer(el, v => v.trim().toLowerCase() === q.a.en.toLowerCase(), done, wrev(q.a));
+      el.innerHTML = `<p class="ask">✍️ 看圖，寫出英文單字</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div>`;
+      const lb = letterBoxes(el, q.a.en, 1);
+      spellHints(el, q.a, lb, { sound: true });
+      typeAnswer(el, v => v.trim().toLowerCase() === q.a.en.toLowerCase(), done, wrev(q.a), { onInput: v => lb.set(v) });
     },
   },
   missingLetter: {
@@ -378,7 +444,8 @@ const Q = {
     },
     render(el, q, done) {
       const shown = esc(q.a.en.slice(0, q.idx)) + '<span class="blank">_</span>' + esc(q.a.en.slice(q.idx + 1));
-      el.innerHTML = `<p class="ask">🔤 少了哪一個字母？</p><div class="big-emo sm">${q.a.emoji}</div><div class="word-show">${shown}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}">🔊</button></div>${optButtons(q.opts.map(esc), 'letters')}`;
+      el.innerHTML = `<p class="ask">🔤 少了哪一個字母？</p><div class="big-emo sm">${q.a.emoji}</div><div class="word-show">${shown}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}">🔊</button></div><div class="hl"></div>${optButtons(q.opts.map(esc), 'letters')}`;
+      hintLadder(el, [() => { speak(q.a.en, 0.55); return '🐢 慢慢聽一次，注意空格那個音'; }]);
       bindOpts(el, q.opts.indexOf(q.letter), done, wrev(q.a), i => { $('.blank', el).textContent = q.opts[i]; });
     },
   },
@@ -387,6 +454,7 @@ const Q = {
     make(c) { const ws = spellable(c.words).filter(w => w.en.length <= 9); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">🧱 用字母積木拼出單字</p><div class="big-emo sm">${q.a.emoji}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}">🔊</button></div>`;
+      hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => `前半段：<b>${esc(q.a.en.slice(0, Math.ceil(q.a.en.length / 2)))}</b> …`]);
       blockPuzzle(el, q.a.en.split(''), done, wrev(q.a), { letters: true });
     },
   },
@@ -411,7 +479,8 @@ const Q = {
       return { key: s.en, s, ans, display, opts: shuffle([ans, ...sample(pool, 3)]) };
     },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✏️ 選出正確的字填入空格</p><div class="sentence">${q.display}</div><div class="zh-big sm">${esc(q.s.zh)}</div>${optButtons(q.opts.map(esc), 'words')}`;
+      el.innerHTML = `<p class="ask">✏️ 選出正確的字填入空格</p><div class="sentence">${q.display}</div><div class="zh-big sm">${esc(q.s.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(esc), 'words')}`;
+      hintLadder(el, [() => { speak(q.s.en); return '🔊 聽整句話，找出空格的字'; }, () => `答案的第一個字母是 <b>${esc(q.ans[0])}</b>`, () => `答案有 <b>${q.ans.length}</b> 個字母`]);
       bindOpts(el, q.opts.indexOf(q.ans), done, { en: q.s.en, zh: q.s.zh }, i => { $('.blank', el).textContent = q.opts[i]; });
     },
   },
@@ -420,6 +489,7 @@ const Q = {
     make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pick(ss); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">🧱 把積木排成正確的句子</p><div class="zh-big">${esc(q.s.zh)} <button class="mini" data-say="${esc(q.s.en)}">🔊</button></div>`;
+      hintLadder(el, [() => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => { speak(q.s.en); return '🔊 聽整句，照順序排'; }, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
       blockPuzzle(el, tokens(q.s.en), done, { en: q.s.en, zh: q.s.zh }, { post: endPunct(q.s.en) });
     },
   },
@@ -429,6 +499,7 @@ const Q = {
     render(el, q, done) {
       el.innerHTML = `<p class="ask">🎧 聽句子，把積木排出來</p>${sayBtns(q.s.en)}`;
       setTimeout(() => speak(q.s.en), 350);
+      hintLadder(el, [() => `中文意思：<b>${esc(q.s.zh)}</b>`, () => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
       blockPuzzle(el, tokens(q.s.en), done, { en: q.s.en, zh: q.s.zh }, { post: endPunct(q.s.en) });
     },
   },
@@ -436,7 +507,8 @@ const Q = {
     label: '聽句子選意思',
     make(c) { if (c.sentences.length < 4) return null; const s = pick(c.sentences); return { key: s.en, s, opts: shuffle([s, ...sample(c.sentences.filter(x => x !== s), 3)]) }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🎧 聽一聽，這句話是什麼意思？</p>${sayBtns(q.s.en)}${optButtons(q.opts.map(o => esc(o.zh)), 'zh-opts')}`;
+      el.innerHTML = `<p class="ask">🎧 聽一聽，這句話是什麼意思？</p>${sayBtns(q.s.en)}<div class="hl"></div>${optButtons(q.opts.map(o => esc(o.zh)), 'zh-opts')}`;
+      hintLadder(el, [() => { speak(q.s.en, 0.55); return '🐢 慢慢再聽一次'; }, () => `英文句子：<b>${esc(q.s.en)}</b>`]);
       setTimeout(() => speak(q.s.en), 350);
       bindOpts(el, q.opts.indexOf(q.s), done, { en: q.s.en, zh: q.s.zh });
     },
@@ -446,8 +518,14 @@ const Q = {
     make(c) { if (!c.sentences.length) return null; const s = pick(c.sentences); return { key: s.en, s }; },
     render(el, q, done) {
       el.innerHTML = `<p class="ask">✍️ 把這句中文寫成英文</p><div class="zh-big">${esc(q.s.zh)}</div>
-        <div class="row center"><button class="mini" data-hint>💡 提示</button><button class="mini" data-say="${esc(q.s.en)}">🔊 聽聽看</button></div><p class="hint-letters" hidden></p>`;
-      $('[data-hint]', el).onclick = () => { const h = $('.hint-letters', el); h.hidden = false; h.textContent = tokens(q.s.en).map(t => t[0] + '_'.repeat(t.length - 1)).join(' ') + endPunct(q.s.en); };
+`;
+      hintLadder(el, [
+        () => `每個字的第一個字母：<b class="mono">${esc(tokens(q.s.en).map(t => t[0] + '_'.repeat(t.length - 1)).join(' ') + endPunct(q.s.en))}</b>`,
+        () => `🔀 會用到這些字（點一下加進去）：${shuffleDiff(tokens(q.s.en)).map(t => `<button type="button" class="wchip addw">${esc(t)}</button>`).join('')}`,
+        () => { speak(q.s.en); return '🔊 聽整句（可以再按上面的提示重聽）'; },
+        () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`,
+      ]);
+      el.addEventListener('click', e => { const c = e.target.closest('.wchip.addw'); const inp = $('.type-in', el); if (c && inp && !inp.disabled) { inp.value = (inp.value.trim() + ' ' + c.textContent).trim(); inp.focus(); } });
       typeAnswer(el, v => norm(v) === norm(q.s.en), done, { en: q.s.en, zh: q.s.zh }, {
         ph: '寫出整句英文…',
         after(v, ok) {
@@ -461,6 +539,40 @@ const Q = {
     },
   },
 };
+
+/* ---------- AI 對話提示：句型 + 字庫 + 例句 ---------- */
+const hintFor = ai => {
+  const h = (typeof CHAT_HINTS !== 'undefined' && CHAT_HINTS[ai]) || null;
+  return h ? { pat: h[0], words: h[1] } : null;
+};
+function hintHtml(h, examples, showEx) {
+  return `<div class="hint-box">
+    ${h ? `<div class="pat">📝 句型：<b>${esc(h.pat)}</b></div>
+    <div class="wbank"><span>💬 點字放進去：</span>${h.words.map(w => `<button type="button" class="wchip">${esc(w)}</button>`).join('')}</div>` : ''}
+    ${examples && examples.length ? `<div class="exs" ${showEx ? '' : 'hidden'}><span>💡 例句：</span>${examples.map(x => `<button type="button" class="chip ex">${esc(x)}</button>`).join('')}</div>
+    ${showEx ? '' : '<button type="button" class="mini" data-showex>💡 還是不會？看例句</button>'}` : ''}
+  </div>`;
+}
+/** 把字庫的字填進輸入框：空的話先放句型，有 ___ 就填進第一個空格 */
+function bindHint(box, getInput, h) {
+  const fillIn = w => {
+    const inp = getInput();
+    if (!inp || inp.disabled) return;
+    let v = inp.value;
+    if (/[.!?]$/.test(w)) v = w;
+    else {
+      if (!v.trim() && h) v = h.pat.split(' / ')[0];
+      v = v.includes('___') ? v.replace('___', w) : (v.trim() + ' ' + w).trim();
+    }
+    inp.value = v; inp.focus();
+    const p = v.indexOf('___');
+    if (p >= 0) inp.setSelectionRange(p, p + 3); else inp.setSelectionRange(v.length, v.length);
+  };
+  $$('.wchip', box).forEach(b => b.onclick = () => { speak(b.textContent); fillIn(b.textContent); });
+  $$('.chip.ex', box).forEach(b => b.onclick = () => { const inp = getInput(); if (inp && !inp.disabled) { inp.value = b.textContent; inp.focus(); } });
+  const se = $('[data-showex]', box);
+  if (se) se.onclick = () => { $('.exs', box).hidden = false; se.remove(); };
+}
 
 /* ---------- 遊戲型題目（直接出現在答題中） ---------- */
 Object.assign(Q, {
@@ -500,22 +612,25 @@ Object.assign(Q, {
   chatReply: {
     label: 'AI 對話', max: 2,
     make(c) {
-      const turns = (c.dialogues || []).flatMap(d => d.turns);
+      const turns = (c.dialogues || []).flatMap(d => d.turns.map((t, i) => ({ t, prev: i > 0 ? d.turns[i - 1] : null })));
       if (!turns.length) return null;
-      const t = pick(turns);
-      return { key: 'chat:' + t.ai, t };
+      const x = pick(turns);
+      return { key: 'chat:' + x.t.ai, t: x.t, prev: x.prev };
     },
     render(el, q, done) {
-      const t = q.t, ai = t.ai.replace(/\{name\}/g, 'friend');
+      const t = q.t, ai = t.ai.replace(/\{name\}/g, 'friend'), h = hintFor(t.ai);
+      const p = q.prev;
       el.innerHTML = `<p class="ask">🤖 Robo 在問你問題，用英文回答它！</p>
-        <div class="msg ai solo"><span class="av">🤖</span><div class="bub"><div>${esc(ai)}</div><div class="zh" hidden>${esc(t.zh)}</div>
-          <div class="tools"><button class="mini" data-say="${esc(ai)}">🔊</button><button class="mini" data-zh>中文</button><button class="mini" data-tip>💡 提示</button></div></div></div>
-        <div class="chips solo" hidden><span>💡 可以這樣說：</span>${t.ex.map(x => `<button type="button" class="chip">${esc(x)}</button>`).join('')}</div>`;
+        ${p ? `<div class="chat-ctx"><small>剛剛聊到：</small>
+          <div class="msg ai"><span class="av">🤖</span><div class="bub">${esc(p.ai.replace(/\{name\}/g, 'friend'))}<div class="zh">${esc(p.zh)}</div></div></div>
+          <div class="msg me"><div class="bub">${esc(p.ex[0])}</div><span class="av">🧒</span></div></div>` : ''}
+        <div class="msg ai solo"><span class="av">🤖</span><div class="bub"><div>${esc(ai)}</div><div class="zh">${esc(t.zh)}</div>
+          <div class="tools"><button class="mini" data-say="${esc(ai)}">🔊</button><button class="mini" data-say="${esc(ai)}" data-slow="1">🐢</button><button class="mini" data-zh>中文</button></div></div></div>
+        ${hintHtml(h, t.ex, false)}`;
       setTimeout(() => speak(ai), 350);
-      $('[data-zh]', el).onclick = () => { const z = $('.bub .zh', el); z.hidden = !z.hidden; };
-      $('[data-tip]', el).onclick = () => { $('.chips', el).hidden = false; };
-      typeAnswer(el, v => accepts(t.keys, v), done, { head: '💡 可以這樣回答：', en: t.ex[0], zh: t.zh }, { ph: '用英文回答…', mic: true });
-      $$('.chip', el).forEach(c => c.onclick = () => { const inp = $('.type-in', el); if (!inp.disabled) { inp.value = c.textContent; inp.focus(); } });
+      $('[data-zh]', el).onclick = () => { const z = $('.msg.solo .zh', el); z.hidden = !z.hidden; };
+      typeAnswer(el, v => accepts(t.keys, v), done, { head: '💡 可以這樣回答：', en: t.ex[0], zh: t.zh }, { ph: h ? h.pat.split(' / ')[0] : '用英文回答…', mic: true });
+      bindHint($('.hint-box', el), () => $('.type-in', el), h);
     },
   },
   makeSentence: {
@@ -533,6 +648,11 @@ Object.assign(Q, {
         <div class="word-card inline"><span class="emo">${w.emoji}</span><div><b>${esc(w.en)}</b><small>${esc(w.zh)}</small></div><button class="mini" data-say="${esc(w.en)}">🔊</button></div>
         <div class="starters">${STARTERS.slice(0, 6).map(s => `<button class="chip" data-st="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
       const rev = q.ex ? { head: '💡 參考句子：', en: q.ex.en, zh: q.ex.zh } : { head: '💡 照上面的提示改一改就更好了', en: '', say: false };
+      hintLadder(el, [
+        () => `✅ 好句子的樣子：<b>大寫開頭</b>、有用到 <b>${esc(w.en)}</b>、<b>3 個字以上</b>、最後加 <b>. ? !</b>`,
+        () => `例如：<b>I like ${esc(w.en)}.</b>　<b>This is my ${esc(w.en)}.</b>　<b>It is ${esc(w.en)}.</b>（選最通順的改一改）`,
+        ...(q.ex ? [() => `參考句子：<b>${esc(q.ex.en)}</b> <small>${esc(q.ex.zh)}</small>`] : []),
+      ]);
       typeAnswer(el, v => checkWriting(v, [w.en]).every(c => c.ok), done, rev, {
         ph: '寫一個完整的句子…',
         after(v, ok) {
@@ -844,7 +964,7 @@ function chatUI(title, back) {
     ai(text, zh) {
       const d = document.createElement('div');
       d.className = 'msg ai';
-      d.innerHTML = `<span class="av">🤖</span><div class="bub"><div>${esc(text)}</div>${zh ? `<div class="zh" hidden>${esc(zh)}</div>` : ''}<div class="tools"><button class="mini" data-say="${esc(text)}">🔊</button>${zh ? '<button class="mini" data-zh>中文</button>' : ''}</div></div>`;
+      d.innerHTML = `<span class="av">🤖</span><div class="bub"><div>${esc(text)}</div>${zh ? `<div class="zh">${esc(zh)}</div>` : ''}<div class="tools"><button class="mini" data-say="${esc(text)}">🔊</button>${zh ? '<button class="mini" data-zh>中文</button>' : ''}</div></div>`;
       const zb = $('[data-zh]', d);
       if (zb) zb.onclick = () => { const z = $('.zh', d); z.hidden = !z.hidden; };
       msgs.appendChild(d); scroll();
@@ -861,9 +981,10 @@ function chatUI(title, back) {
       d.innerHTML = `<div class="bub">${esc(text)}${tip ? `<div class="tip-s">💡 ${tip}</div>` : ''}</div><span class="av">🧒</span>`;
       msgs.appendChild(d); scroll();
     },
-    chips(list) {
-      chips.innerHTML = list && list.length ? `<span>💡 可以這樣說：</span>${list.map(x => `<button type="button" class="chip">${esc(x)}</button>`).join('')}` : '';
-      $$('.chip', chips).forEach(c => c.onclick = () => { inp.value = c.textContent; inp.focus(); });
+    chips(list, h) {
+      chips.innerHTML = (list && list.length) || h ? hintHtml(h, list, false) : '';
+      bindHint(chips, () => inp, h);
+      inp.placeholder = h ? h.pat.split(' / ')[0] : '用英文回答…';
     },
     onSend(f) { handler = f; },
     end(html) {
@@ -893,7 +1014,7 @@ function dialogueChat(d, back) {
   const ui = chatUI(`${d.icon} ${d.title}`, back);
   let t = 0, tries = 0, name = 'friend', busy = false;
   const fill = s => s.replace(/\{name\}/g, name);
-  const ask = (pre = '') => { const tn = d.turns[t]; ui.ai((pre ? pre + ' ' : '') + fill(tn.ai), tn.zh); ui.chips(tn.ex); busy = false; };
+  const ask = (pre = '') => { const tn = d.turns[t]; ui.ai((pre ? pre + ' ' : '') + fill(tn.ai), tn.zh); ui.chips(tn.ex, hintFor(tn.ai)); busy = false; };
   ask();
   ui.onSend((text, typed) => {
     if (busy) return;
@@ -959,7 +1080,7 @@ function freeChat(back) {
   const st = { name: null, order: shuffle(BOT_QUESTIONS), qi: 0 };
   const nextQ = () => {
     const q = st.order[st.qi++ % st.order.length];
-    ui.ai(q[0], q[1]); ui.chips(q[2]);
+    ui.ai(q[0], q[1]); ui.chips(q[2], hintFor(q[0]));
   };
   ui.ai("Hi! I'm Robo 🤖. Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
   setTimeout(nextQ, 400);

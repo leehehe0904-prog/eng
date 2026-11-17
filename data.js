@@ -371,3 +371,83 @@ const BOT_QUESTIONS = [
   ['Can you swim?', '你會游泳嗎？', ['Yes, I can.', "No, I can't."]],
   ['What did you eat for breakfast?', '你早餐吃了什麼？', ['I ate bread.', 'I had eggs and milk.']],
 ];
+
+// ---------- AI 對話的提示：句型 + 可以用的字 ----------
+// 依照 AI 問的句子（要跟對話裡的 ai 文字完全一樣）對應。
+// 句型中的 ___ 會被點選的字填進去；字以 . ? ! 結尾代表整句直接帶入。
+const CHAT_HINTS = {
+  // 一年級
+  'Hello!': ['Hi! / Hello!', ['Hi!', 'Hello!', 'Good morning!']],
+  "What's your name?": ['My name is ___.', ['Amy', 'Ben', 'Lily', 'Tom', 'Kevin']],
+  'Nice to meet you, {name}! How are you?': ["I'm ___, thank you.", ['fine', 'good', 'great', 'happy', 'tired']],
+  'Goodbye, {name}!': ['___! See you!', ['Bye', 'Goodbye']],
+  'Look! 🍎 What is this?': ['It is an ___.', ['apple', 'egg']],
+  'What color is it?': ['It is ___.', ['red', 'blue', 'yellow', 'green']],
+  'Do you like apples?': ['Yes, I do. / No, I don\'t.', ['Yes, I do.', "No, I don't."]],
+  '🍎🍎🍎 How many apples?': ['___ apples.', ['One', 'Two', 'Three']],
+  // 二年級
+  '👩 Who is she?': ['She is my ___.', ['mom', 'sister', 'grandma', 'teacher']],
+  '👨 Who is he?': ['He is my ___.', ['dad', 'brother', 'grandpa', 'uncle']],
+  'Do you have a brother or a sister?': ['Yes, I have a ___. / No, I don\'t.', ['brother', 'sister', "No, I don't."]],
+  'How many people are in your family?': ['There are ___ people in my family.', ['three', 'four', 'five', 'six']],
+  '👃 Touch your nose! What is this?': ['It is my ___.', ['nose', 'eye', 'ear', 'mouth']],
+  'How many eyes do you have?': ['I have ___ eyes.', ['one', 'two', 'three']],
+  "I'm thirsty. Can I have some juice? 🧃": ['Sure! Here you are.', ['Sure! Here you are.', 'Yes, you can.', "Sorry, I don't have juice."]],
+  'Thank you!': ["You're welcome.", ["You're welcome.", 'No problem.']],
+  // 三年級
+  "Hi! I'm hungry. Are you hungry?": ["Yes, I am. / No, I'm not.", ['Yes, I am.', "No, I'm not."]],
+  'What are you eating?': ['I am eating ___.', ['noodles', 'rice', 'pizza', 'a hamburger', 'bread', 'cake']],
+  'Yummy! What food do you like?': ['I like ___.', ['pizza', 'noodles', 'rice', 'hamburgers', 'cake', 'chicken']],
+  'Me too! Are you full now?': ["Yes, I'm full. / No, I'm still hungry.", ["Yes, I'm full.", "No, I'm still hungry."]],
+  'Can you swim?': ["Yes, I can. / No, I can't.", ['Yes, I can.', "No, I can't."]],
+  'Can you sing?': ["Yes, I can. / No, I can't.", ['Yes, I can.', "No, I can't."]],
+  'What animal do you like?': ['I like ___.', ['tigers', 'rabbits', 'monkeys', 'elephants', 'lions', 'dogs', 'cats']],
+  'Why do you like them?': ['Because they are ___.', ['cute', 'big', 'strong', 'funny', 'cool', 'smart', 'soft']],
+  // 四年級
+  "Good morning! How's the weather today?": ["It's ___ today.", ['sunny', 'rainy', 'cloudy', 'windy', 'hot', 'cold']],
+  'What time is it now?': ["It's ___.", ["seven o'clock", "eight o'clock", 'seven thirty', 'six forty']],
+  'What do you eat for breakfast?': ['I eat ___ and drink ___.', ['bread', 'eggs', 'a sandwich', 'milk', 'juice', 'soy milk']],
+  "Don't be late for school! Do you have your umbrella?": ["Yes, I do. / No, I don't.", ['Yes, I do.', "No, I don't."]],
+  'What do you do after school?': ['I ___ after school.', ['play basketball', 'do my homework', 'read books', 'play the piano', 'watch TV']],
+  'Can you play the piano?': ["Yes, I can. / No, I can't.", ['Yes, I can.', "No, I can't."]],
+  'Where is your mom now?': ['She is in the ___. / She is at ___.', ['kitchen', 'living room', 'bedroom', 'work', 'home']],
+  'What do you have for dinner?': ['I have ___ for dinner.', ['rice', 'fish', 'noodles', 'chicken', 'soup', 'vegetables']],
+  // 五年級
+  'How do you go to school?': ['I go to school by ___. / I walk to school.', ['bus', 'bike', 'car', 'MRT', 'I walk to school.']],
+  'Where do you want to go this weekend?': ['I want to go to the ___.', ['park', 'zoo', 'library', 'beach', 'museum']],
+  'Cool! What will you do there?': ['I will ___.', ['play with my friends', 'read books', 'see the animals', 'swim', 'take pictures']],
+  'How will you get there?': ['By ___.', ['bus', 'bike', 'car', 'train', 'MRT']],
+  'When is your birthday?': ['My birthday is in ___.', ['January', 'March', 'May', 'August', 'October', 'December']],
+  'What do you want for your birthday?': ['I want a ___.', ['new bike', 'big cake', 'toy car', 'storybook', 'puppy']],
+  'This toy is 2000 dollars. Is it cheap or expensive?': ["It's ___!", ['expensive', 'cheap']],
+  'How much money do you have?': ['I have ___ dollars.', ['fifty', 'one hundred', 'five hundred', "I don't have money."]],
+  // 六年級
+  'What do you want to be in the future?': ['I want to be a ___.', ['scientist', 'teacher', 'doctor', 'engineer', 'firefighter', 'singer']],
+  'Why?': ['Because I ___.', ['like science', 'want to help people', 'love music', 'like children', 'want to be famous']],
+  'That sounds great! What did you do yesterday?': ['I ___ yesterday.', ['went to the library', 'played basketball', 'watched a movie', 'visited my grandma', 'did my homework']],
+  'What will you do tomorrow?': ['I will ___ tomorrow.', ['visit my grandma', 'go to the park', 'study English', 'play games', 'clean my room']],
+  'Do you recycle at home?': ["Yes, I do. / No, I don't.", ['Yes, I do.', "No, I don't."]],
+  'What can we recycle?': ['We can recycle ___.', ['bottles', 'paper', 'cans', 'plastic bags', 'boxes']],
+  'How can we protect the environment?': ['We should ___.', ['save water', 'turn off the lights', 'recycle', 'not waste food', 'plant trees']],
+  'Which is more important, money or the earth?': ['The ___ is more important.', ['earth', 'money']],
+  // 英檢口說面試
+  "Hello. What's your name?": ['My name is ___.', ['Amy Chen', 'Kevin Lin', 'Lily Wang']],
+  'Nice to meet you, {name}. How old are you?': ["I'm ___ years old.", ['ten', 'eleven', 'twelve', 'thirteen']],
+  'What do you like to do in your free time?': ['I like to ___.', ['read books', 'play basketball', 'draw pictures', 'listen to music']],
+  'Why do you study English?': ['Because ___.', ['English is useful', 'I want to travel', 'I like English songs', 'I want to make friends']],
+  'What did you do last weekend?': ['I ___ last weekend.', ['went to the beach', 'stayed home', 'watched TV', 'visited my grandparents']],
+  'Excuse me. Is there a post office near here?': ['Yes, there is one on ___.', ['Park Road', 'Main Street', 'Zhongshan Road']],
+  'How can I get there?': ['Go straight and turn ___ at the corner.', ['left', 'right']],
+  'Is it far from here?': ["No, it's about ___ minutes on foot.", ['five', 'ten', 'fifteen']],
+  'Thank you very much!': ["You're welcome.", ["You're welcome.", 'No problem.']],
+  // 自由聊天
+  'How old are you?': ["I'm ___ years old.", ['eight', 'nine', 'ten', 'eleven', 'twelve']],
+  "What's your favorite color?": ['My favorite color is ___.', ['red', 'blue', 'green', 'pink', 'yellow', 'purple']],
+  'What food do you like?': ['I like ___.', ['pizza', 'noodles', 'rice', 'hamburgers', 'dumplings']],
+  'Do you have a pet?': ["Yes, I have a ___. / No, I don't.", ['dog', 'cat', 'fish', 'rabbit', "No, I don't."]],
+  'What do you like to do after school?': ['I like to ___.', ['play basketball', 'read books', 'watch TV', 'draw pictures']],
+  "What's the weather like today?": ["It's ___.", ['sunny', 'rainy', 'cloudy', 'hot', 'cold']],
+  'Who is in your family?': ['My ___, my ___ and me.', ['mom', 'dad', 'brother', 'sister', 'grandma']],
+  "What's your favorite animal?": ['My favorite animal is the ___.', ['panda', 'dog', 'cat', 'tiger', 'rabbit']],
+  'What did you eat for breakfast?': ['I ate ___.', ['bread', 'eggs', 'a sandwich', 'rice balls']],
+};
