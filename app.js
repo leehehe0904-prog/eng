@@ -15,9 +15,18 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const ABC = 'ABCD';
 const PRAISE = ['Great! 好棒！', 'Good job! 做得好！', 'Excellent! 太厲害了！', 'Super! 超棒！', 'Well done! 很好！', 'Awesome! 讚！'];
 
+/* 儲存：每個學生（個人資料）的進度分開存；語音、AI、學生名單是整台電腦共用 */
+const GLOBAL_KEYS = new Set(['voice', 'ai', 'profiles', 'pid']);
+const rawGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+const rawSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 無痕模式等情況就不存 */ } };
+const storeKey = k => {
+  if (GLOBAL_KEYS.has(k)) return 'engAdv_' + k;
+  const pid = rawGet('engAdv_pid', null);
+  return pid ? `engAdv_p${pid}_${k}` : 'engAdv_' + k;   // 沒登入（訪客）沿用舊的存法
+};
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('engAdv_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem('engAdv_' + k, JSON.stringify(v)); } catch (e) { /* 無痕模式等情況就不存 */ } },
+  get(k, d) { return rawGet(storeKey(k), d); },
+  set(k, v) { rawSet(storeKey(k), v); },
 };
 
 for (const g of Object.values(GRADES)) {
@@ -906,21 +915,11 @@ Object.assign(Q, {
     },
     render(el, q, done) {
       const rev = { en: q.s.en, zh: q.s.zh };
-      el.innerHTML = `<p class="ask">聽一聽，按 <i class="ic ic-mic"></i> 跟著說一次</p>${sayBtns(q.s.en)}
-        <div class="sentence">${esc(q.s.en)}</div><div class="zh-big sm">${esc(q.s.zh)}</div>
-        <div class="row center"><button class="btn primary big" data-mic><i class="ic ic-mic"></i> 開始說</button><button class="btn ghost" data-skip>略過這題</button></div>
-        <div class="said"></div>`;
+      el.innerHTML = `<p class="ask">聽一聽，按 <i class="ic ic-mic"></i> 跟著說一次（每個字都念清楚才過關）</p>${sayBtns(q.s.en)}
+        <div class="zh-big sm">${esc(q.s.zh)}</div>`;
       setTimeout(() => speak(q.s.en), 350);
-      let tries = 0, over = false;
-      const finish = ok => { over = true; $('[data-mic]', el).disabled = $('[data-skip]', el).disabled = true; done(ok, rev); };
-      $('[data-mic]', el).onclick = e => { if (!over) recognize(e.currentTarget, t => {
-        const p = Math.round(similarity(q.s.en, t) * 100);
-        $('.said', el).innerHTML = `你說：「${esc(t)}」 <b class="${p >= 70 ? 'g' : 'r'}">${p} 分</b>`;
-        if (p >= 70) finish(true);
-        else if (++tries >= 2) finish(false);
-        else { sfx(false); $('.said', el).innerHTML += '　再試一次！'; }
-      }, { recText: '<i class="ic ic-stop"></i> 聽你說…' }); };
-      $('[data-skip]', el).onclick = () => finish(false);
+      // 發音不正確不給過關；三次內過關算答對，略過算答錯
+      pronPractice(el, q.s.en, { skip: true, onPass: (r, tries) => done(tries <= 3, rev), onSkip: () => done(false, rev) });
     },
   },
 });
@@ -1133,6 +1132,8 @@ function home() {
     <div class="modes">
       ${modeCard('daily', '', '生活英文', '每天都用得到的句子')}
       ${modeCard('free', '', '自由聊天', '跟機器人 Robo 聊天')}
+      ${modeCard('news', '', '時事聊天', '依年齡挑選今天的新聞來聊')}
+      ${modeCard('ask', '', '問問 AI 老師', '某句話有哪些說法？都可以問')}
       ${modeCard('diary', '', '英文日記', '自己寫英文句子')}
       ${modeCard('works', '', '我的作品', '看看寫過的句子')}
     </div>
@@ -1141,7 +1142,7 @@ function home() {
   $$('.lv').forEach(b => b.onclick = () => { store.set('level', b.dataset.lv); home(); });
   $$('.grade').forEach(b => b.onclick = () => gradeView(b.dataset.g));
   const back = home;
-  const act = { daily: () => dailyMenu(back), free: () => freeChat(back), diary: () => diary(back), works: () => works(back) };
+  const act = { daily: () => dailyMenu(back), free: () => freeChat(back), news: () => newsChat(back), ask: () => askTeacher(back), diary: () => diary(back), works: () => works(back) };
   $$('.mode').forEach(b => b.onclick = () => act[b.dataset.m]());
 }
 
@@ -1328,18 +1329,38 @@ const AI_MODELS = [
   { id: 'Qwen2.5-3B-Instruct', name: '比較聰明（較慢）', size: '約 2 GB' },
 ];
 const AI = { engine: null, model: null, loading: null };
-const AI_SYSTEM = `You are Robo, a friendly robot who chats in English with a child in Taiwan (age 7-12) who is learning English.
+/** 依照學生年齡決定 AI 說話的難度 */
+function ageLevel(age) {
+  if (!age) return { cefr: 'A1-A2 (beginner)', words: 25, who: 'a child' };
+  if (age <= 9) return { cefr: 'pre-A1 to A1 (very easy words only)', words: 15, who: 'a young child' };
+  if (age <= 12) return { cefr: 'A1-A2 (beginner)', words: 25, who: 'a child' };
+  if (age <= 15) return { cefr: 'A2-B1 (junior high school level)', words: 35, who: 'a junior high school student' };
+  if (age <= 18) return { cefr: 'B1-B2 (senior high school level)', words: 45, who: 'a senior high school student' };
+  return { cefr: 'B2-C1 (university level, natural English)', words: 60, who: 'a university student or adult' };
+}
+function learnerInfo() {
+  const p = currentProfile();
+  if (!p) return '';
+  const city = COUNTIES.find(c => c[0] === p.city);
+  return `The learner's name is ${p.name || 'not given'}${p.age ? `, age ${p.age}` : ''}${city ? `, living in ${city[1]}, Taiwan` : ''}.`;
+}
+/** AI 聊天的系統提示（會依照年齡調整難度；extra 可以加上話題） */
+function aiSystem(extra = '') {
+  const p = currentProfile(), L = ageLevel(p && p.age);
+  return `You are Robo, a friendly robot who chats in English with ${L.who} in Taiwan who is learning English. ${learnerInfo()}
 Rules:
-- Read what the child just said and reply to THAT. Stay on the child's topic. Never ignore what they said.
-- Use very simple English (beginner level). 1 or 2 short sentences, no more than 25 words.
-- End with ONE easy question so the child can keep talking about the same topic.
-- If the child's English has a mistake, first show the correct sentence kindly, like: You can say "I went to the park."
-- If the child writes Chinese, reply in simple English and show how to say it in English.
+- Read what the learner just said and reply to THAT. Stay on the learner's topic. Never ignore what they said.
+- Use English at CEFR ${L.cefr}. 1 to 3 short sentences, no more than ${L.words} words.
+- End with ONE question so the learner can keep talking about the same topic.
+- If the learner's English has a mistake, first show the correct sentence kindly, like: You can say "I went to the park."
+- If the learner writes Chinese, reply in English and show how to say it in English.
 - Be kind, positive and safe for children. Do not use emoji.
+${extra}
 Always answer in exactly this format (three lines):
 EN: your English reply
 ZH: the same reply in Traditional Chinese (繁體中文)
-TRY: one short, easy example answer the child could say next`;
+TRY: one short example answer the learner could say next`;
+}
 
 async function getGPU() {
   if (!navigator.gpu) return null;
@@ -1360,44 +1381,33 @@ async function loadAI(base, onProgress) {
   })();
   try { return await AI.loading; } finally { AI.loading = null; }
 }
+const aiReady = () => !!(AI.engine && AI.model);
 function parseAI(raw) {
   const get = k => { const m = raw.match(new RegExp(`^\\s*${k}\\s*[:：]\\s*(.+)$`, 'mi')); return m ? m[1].trim() : ''; };
   let en = get('EN'), zh = get('ZH'), tryIt = get('TRY');
   if (!en) en = raw.replace(/^\s*(ZH|TRY)\s*[:：].*$/gmi, '').trim();
   const clean = s => s.replace(/\p{Extended_Pictographic}|️/gu, '').replace(/^["“]|["”]$/g, '').trim();
-  return { en: clean(en).slice(0, 300), zh: clean(zh), tryIt: clean(tryIt) };
+  return { en: clean(en).slice(0, 400), zh: clean(zh), tryIt: clean(tryIt) };
 }
 
-function freeChat(back) {
-  const ui = chatUI('自由聊天', back);
-  const st = { name: null, order: shuffle(BOT_QUESTIONS), qi: 0 };
-  const history = [];
-  let busy = false, alive = true;
-  onLeave(() => { alive = false; });
-  const nextQ = () => {
-    const q = st.order[st.qi++ % st.order.length];
-    ui.ai(q[0], q[1]); ui.chips(q[2], hintFor(q[0]));
-    history.push({ role: 'assistant', content: `EN: ${q[0]}\nZH: ${q[1]}\nTRY: ${q[2][0]}` });
-  };
-
-  // ---- AI 面板 ----
-  const panel = ui.panel();
+/** AI 大腦面板（自由聊天、時事聊天、問問 AI 老師共用）。onReady：AI 準備好時呼叫 */
+function mountAIPanel(panel, isAlive, o = {}) {
   const pref = store.get('ai', { model: AI_MODELS[0].id, auto: false });
-  const ready = () => AI.engine && AI.model;
-  const drawPanel = (state, extra = '') => {
+  const draw = (state, extra = '') => {
+    if (!isAlive()) return;
     if (state === 'on') {
       panel.className = 'ai-panel on';
-      panel.innerHTML = `<b>AI 大腦已開啟</b>Robo 會依照你說的話回答你（${esc(AI_MODELS.find(m => m.id === AI.model)?.name || '')}）
+      panel.innerHTML = `<b>AI 大腦已開啟</b>${esc(o.onText || 'Robo 會依照你說的話回答你')}（${esc(AI_MODELS.find(m => m.id === AI.model)?.name || '')}）
         <small>${hdReady() ? '聲音：高清標準美式發音' : HD.loading ? `高清聲音下載中 ${HD.pct}%…（先用瀏覽器聲音）` : '聲音：瀏覽器內建（可到右上角「語音設定」開啟高清語音）'}</small>`;
     } else if (state === 'loading') {
       panel.className = 'ai-panel';
       panel.innerHTML = `<b>正在啟動 AI 大腦…</b><div class="ai-bar"><div style="width:${extra.pct || 0}%"></div></div><small>${esc(extra.text || '')}</small><small>第一次要下載模型，請保持網路連線；下載完會存在電腦裡，下次就很快。</small>`;
     } else if (state === 'nogpu') {
       panel.className = 'ai-panel off';
-      panel.innerHTML = '<b>這台電腦或瀏覽器不能開 AI 大腦</b>需要電腦版 Chrome 或 Edge（支援 WebGPU）。先用簡單版 Robo 聊天吧！';
+      panel.innerHTML = `<b>這台電腦或瀏覽器不能開 AI 大腦</b>${esc(o.noGpuText || '需要電腦版 Chrome 或 Edge（支援 WebGPU）。')}`;
     } else {
       panel.className = 'ai-panel';
-      panel.innerHTML = `<b>想讓 Robo 真的聽懂你說的話嗎？</b>開啟免費的 AI 大腦，它會跟著你說的內容回答。
+      panel.innerHTML = `<b>${esc(o.offTitle || '想讓 Robo 真的聽懂你說的話嗎？')}</b>${esc(o.offText || '開啟免費的 AI 大腦，它會跟著你說的內容回答。')}
         ${extra ? `<div class="r">${esc(extra)}</div>` : ''}
         <div class="row"><select data-model>${AI_MODELS.map(m => `<option value="${m.id}" ${m.id === pref.model ? 'selected' : ''}>${m.name}・${m.size}</option>`).join('')}</select>
         <button class="btn primary" data-load>開啟 AI 大腦</button></div>
@@ -1406,29 +1416,46 @@ function freeChat(back) {
     }
   };
   const start = async base => {
-    drawPanel('loading', { pct: 0, text: '' });
+    draw('loading', { pct: 0, text: '' });
     // AI 的聲音也換成高清標準美式（和 AI 大腦同時下載）
     setHD(true);
-    loadHD().then(() => { if (alive && ready()) drawPanel('on'); }).catch(() => setHD(false));
+    loadHD().then(() => { if (aiReady()) draw('on'); }).catch(() => setHD(false));
     try {
-      await loadAI(base, r => { if (alive) drawPanel('loading', { pct: Math.round((r.progress || 0) * 100), text: r.text }); });
+      await loadAI(base, r => draw('loading', { pct: Math.round((r.progress || 0) * 100), text: r.text }));
       store.set('ai', { model: base, auto: true });
-      if (alive) { drawPanel('on'); toast('AI 大腦開啟了！跟 Robo 說說話吧'); }
+      draw('on');
+      if (isAlive()) { toast('AI 大腦開啟了！'); o.onReady && o.onReady(); }
     } catch (e) {
-      if (!alive) return;
-      if (e.message === 'nogpu') drawPanel('nogpu');
-      else drawPanel('off', '啟動失敗：' + (e.message || e) + '（可以改選「輕量」再試一次）');
+      if (e.message === 'nogpu') draw('nogpu');
+      else draw('off', '啟動失敗：' + (e.message || e) + '（可以改選「輕量」再試一次）');
     }
   };
-  if (ready()) drawPanel('on');
+  if (aiReady()) { draw('on'); o.onReady && setTimeout(o.onReady, 0); }
   else getGPU().then(g => {
-    if (!alive) return;
-    if (!g) drawPanel('nogpu');
+    if (!isAlive()) return;
+    if (!g) draw('nogpu');
     else if (pref.auto) start(pref.model);   // 之前開過：自動從電腦裡的快取載入
-    else drawPanel('off');
+    else draw('off');
   });
+}
 
-  ui.ai("Hi! I'm Robo. Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
+function freeChat(back) {
+  const ui = chatUI('自由聊天', back);
+  const st = { name: null, order: shuffle(BOT_QUESTIONS), qi: 0 };
+  const history = [];
+  let busy = false, alive = true;
+  onLeave(() => { alive = false; });
+  const ready = aiReady;
+  const nextQ = () => {
+    const q = st.order[st.qi++ % st.order.length];
+    ui.ai(q[0], q[1]); ui.chips(q[2], hintFor(q[0]));
+    history.push({ role: 'assistant', content: `EN: ${q[0]}\nZH: ${q[1]}\nTRY: ${q[2][0]}` });
+  };
+  mountAIPanel(ui.panel(), () => alive, { noGpuText: '需要電腦版 Chrome 或 Edge（支援 WebGPU）。先用簡單版 Robo 聊天吧！' });
+
+  const me = currentProfile();
+  if (me) ui.ai(`Hi, ${me.name}! I'm Robo. Let's talk in English!`, `嗨，${me.name}！我是 Robo。我們用英文聊天吧！`);
+  else ui.ai("Hi! I'm Robo. Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
   setTimeout(nextQ, 400);
 
   ui.onSend(async (text, typed) => {
@@ -1440,7 +1467,7 @@ function freeChat(back) {
       history.push({ role: 'user', content: text });
       try {
         const r = await AI.engine.chat.completions.create({
-          messages: [{ role: 'system', content: AI_SYSTEM }, ...history.slice(-12)],
+          messages: [{ role: 'system', content: aiSystem() }, ...history.slice(-12)],
           temperature: 0.7, max_tokens: 180,
         });
         const raw = r.choices[0].message.content || '';
@@ -1493,13 +1520,11 @@ function dailyCat(c, back) {
     <div class="card"><ul class="daily">${S.map((s, i) => `<li><div><b>${esc(s.en)}</b><small>${esc(s.zh)}</small><div class="res" data-r="${i}"></div></div>
       <div class="acts"><button class="mini" data-say="${esc(s.en)}"><i class="ic ic-say"></i></button><button class="mini" data-say="${esc(s.en)}" data-slow="1">慢速</button><button class="mini" data-mic="${i}"><i class="ic ic-mic"></i> 跟讀</button></div></li>`).join('')}</ul></div>
     <div class="row center"><button class="btn primary big" data-practice>開始練習</button></div>`, () => dailyMenu(back));
+  // 跟讀：打開這句的發音練習，念清楚才過關
   $$('[data-mic]').forEach(b => b.onclick = () => {
-    const i = +b.dataset.mic;
-    recognize(b, t => {
-      const p = Math.round(similarity(S[i].en, t) * 100);
-      $(`[data-r="${i}"]`).innerHTML = `你說：「${esc(t)}」 <b class="${p >= 80 ? 'g' : 'r'}">${p} 分</b> ${p >= 80 ? '' : '再試試！'}`;
-      sfx(p >= 80);
-    }, { recText: '<i class="ic ic-stop"></i> 聽你說' });
+    const res = $(`[data-r="${+b.dataset.mic}"]`);
+    if (res.firstChild) return;
+    pronPractice(res, S[+b.dataset.mic].en, { micText: '開始跟讀' });
   });
   $('[data-practice]').onclick = () => runQuiz({ title: `${c.name}・練習`, types: ['listenSentenceZh', 'sentenceBlocks', 'listenBlocks', 'fillSentence', 'writeSentence'], words: ALL_WORDS, sentences: S, n: 8, key: 'daily-' + c.id, back: () => dailyCat(c, back) });
 }
@@ -1683,22 +1708,21 @@ function speakRepeat() {
     view(`${bar('口說・複誦')}
       <div class="progress"><div style="width:${(i / list.length) * 100}%"></div></div>
       <div class="card qcard">
-        <p class="ask">第 ${i + 1} / ${list.length} 句：仔細聽，然後按 <i class="ic ic-mic"></i> 把句子<b>完整說一次</b><br><small>（正式考試時句子只唸給你聽，不會顯示）</small></p>
+        <p class="ask">第 ${i + 1} / ${list.length} 句：仔細聽，然後按 <i class="ic ic-mic"></i> 把句子<b>完整說一次</b>，每個字都念清楚才過關<br><small>（正式考試時句子只唸給你聽，不會顯示）</small></p>
         ${sayBtns(s)}
-        <div class="row center"><button class="btn primary big" data-mic><i class="ic ic-mic"></i> 開始說</button></div>
-        <div class="said"></div>
+        <div class="pron-host"></div>
         <details class="sample"><summary>看句子</summary><p><b>${esc(s)}</b></p></details>
-        ${SR ? '' : '<p class="note-s">這個瀏覽器不能語音辨識，可以自己大聲說完後，打開「看句子」對照。</p>'}
-        <div class="row center"><button class="btn" data-next>下一句 →</button></div>
+        <div class="row center"><button class="btn" data-next disabled>下一句 →</button></div>
       </div>`, geptHome);
     setTimeout(() => speak(s), 400);
-    $('[data-mic]').onclick = e => recognize(e.currentTarget, t => {
-      const p = Math.round(similarity(s, t) * 100);
-      $('.said').innerHTML = `你說：「${esc(t)}」<br><b class="${p >= 70 ? 'g' : 'r'}">${p} 分</b> ${scoreMsg(p)}`;
-      sfx(p >= 70);
-      $('.sample').open = true;
+    const nx = $('[data-next]');
+    pronPractice($('.pron-host'), s, {
+      showText: false, skip: true,
+      onPass: () => { nx.disabled = false; $('.sample').open = true; },
+      onFail: () => { $('.sample').open = true; },
+      onSkip: () => { nx.disabled = false; $('.sample').open = true; },
     });
-    $('[data-next]').onclick = () => { i++; draw(); };
+    nx.onclick = () => { i++; draw(); };
   }
 }
 
@@ -1715,13 +1739,14 @@ function speakRead(idx) {
       <p class="note-s">朗讀重點：發音清楚、速度穩定、句號要停頓、問句語調要上揚。</p>
     </div>`, geptHome);
   $('[data-mic]').onclick = e => recognize(e.currentTarget, t => {
-    const said = new Set(norm(t).split(' '));
+    const r = pronCheck(p.text, t);
     const spans = $$('.rtext span');
-    let hit = 0;
-    spans.forEach(sp => { const k = norm(sp.textContent); const ok = !k || said.has(k); sp.className = ok ? 'g' : 'r'; if (ok) hit++; });
-    const pct = Math.round((hit / spans.length) * 100);
-    $('.said').innerHTML = `<b class="${pct >= 70 ? 'g' : 'r'}">${pct} 分</b> ${scoreMsg(pct)}<br><small>綠色＝有唸到，紅色＝電腦沒聽到，可以多練習這些字</small>`;
-    sfx(pct >= 70);
+    r.words.forEach((w, i) => { if (spans[i]) spans[i].className = w.ok ? 'g' : 'r'; });
+    $('.said').innerHTML = `<b class="${r.pass ? 'g' : 'r'}">${r.pct} 分</b> ${r.pass ? '過關！念得很清楚' : '還沒過關，紅色的字再練習一下'}
+      ${r.missed.length ? `<div class="pron-miss">沒念清楚的字：${[...new Set(r.missed)].map(w => `<button class="wchip miss" data-say="${esc(w)}" data-slow="1"><i class="ic ic-say"></i> ${esc(w)}</button>`).join('')}</div>` : ''}
+      ${pronTips(r.missed).map(x => `<div class="pron-tip">${esc(x)}</div>`).join('')}
+      <small>綠色＝念清楚了，紅色＝電腦沒聽到。點紅色的字聽慢速發音。</small>`;
+    sfx(r.pass);
   }, { continuous: true, recText: '<i class="ic ic-stop"></i> 唸完了，按這裡結束' });
   $('[data-next]').onclick = () => speakRead(idx + 1);
 }
@@ -1783,7 +1808,359 @@ function speakAnswer() {
   }
 }
 
+/* =========================================================
+   個人資料（在這台電腦登入；每個學生的進度分開存）
+   ========================================================= */
+const COUNTIES = [
+  ['臺北市', 'Taipei'], ['新北市', 'New Taipei'], ['桃園市', 'Taoyuan'], ['臺中市', 'Taichung'], ['臺南市', 'Tainan'], ['高雄市', 'Kaohsiung'],
+  ['基隆市', 'Keelung'], ['新竹市', 'Hsinchu City'], ['嘉義市', 'Chiayi City'], ['新竹縣', 'Hsinchu County'], ['苗栗縣', 'Miaoli'], ['彰化縣', 'Changhua'],
+  ['南投縣', 'Nantou'], ['雲林縣', 'Yunlin'], ['嘉義縣', 'Chiayi County'], ['屏東縣', 'Pingtung'], ['宜蘭縣', 'Yilan'], ['花蓮縣', 'Hualien'],
+  ['臺東縣', 'Taitung'], ['澎湖縣', 'Penghu'], ['金門縣', 'Kinmen'], ['連江縣', 'Matsu'],
+];
+const profiles = () => store.get('profiles', []);
+const currentProfile = () => { const id = rawGet('engAdv_pid', null); return id ? profiles().find(p => p.id === id) || null : null; };
+const levelForAge = a => (a <= 12 ? 'elem' : a <= 15 ? 'jh' : a <= 18 ? 'sh' : 'uni');
+function switchProfile(id) { rawSet('engAdv_pid', id); location.reload(); }   // 重新載入，換成這個學生的進度
+
+function profilePage(back, editId) {
+  const list = profiles(), cur = currentProfile();
+  const ed = editId === 'new' ? { id: '', name: '', age: '', city: '' } : list.find(p => p.id === editId) || null;
+  view(`${bar('個人資料')}
+    <div class="card">
+      <p class="ask">目前使用：${cur ? `<b>${esc(cur.name)}</b>（${cur.age ? cur.age + ' 歲' : '未填年齡'}${cur.city ? '・' + esc(cur.city) : ''}）` : '<b>訪客</b>（沒有登入，進度存在共用區）'}</p>
+      <div class="profiles">${list.map(p => `<div class="pf ${cur && cur.id === p.id ? 'on' : ''}"><span class="pf-av" style="background:${p.color}">${esc((p.name || '?').slice(0, 1))}</span>
+        <div><b>${esc(p.name)}</b><small>${p.age ? p.age + ' 歲' : ''}${p.city ? '・' + esc(p.city) : ''}</small></div>
+        ${cur && cur.id === p.id ? '<span class="badge">使用中</span>' : `<button class="btn primary" data-use="${p.id}">登入</button>`}
+        <button class="mini" data-edit="${p.id}">編輯</button></div>`).join('') || '<p class="note-s">還沒有任何學生，先新增一個吧！</p>'}</div>
+      <div class="row"><button class="btn" data-new>＋ 新增學生</button>${cur ? '<button class="btn ghost" data-out>登出（改用訪客）</button>' : ''}</div>
+    </div>
+    ${ed ? `<div class="card pf-form"><h3>${ed.id ? '編輯資料' : '新增學生'}</h3>
+      <label>名字（英文名或中文名都可以）<input class="type-in" data-name value="${esc(ed.name)}" maxlength="20"></label>
+      <label>年齡（會用來挑選適合的時事話題和 AI 說話難度）<select data-age><option value="">請選擇</option>${Array.from({ length: 55 }, (_, i) => i + 6).map(a => `<option value="${a}" ${+ed.age === a ? 'selected' : ''}>${a} 歲</option>`).join('')}</select></label>
+      <label>縣市<select data-city><option value="">（不填）</option>${COUNTIES.map(([c]) => `<option ${ed.city === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+      <div class="row"><button class="btn primary" data-save>儲存並登入</button>${ed.id ? '<button class="btn ghost" data-del>刪除這個學生</button>' : ''}</div>
+    </div>` : ''}`, back);
+  $$('[data-use]').forEach(b => b.onclick = () => switchProfile(b.dataset.use));
+  $$('[data-edit]').forEach(b => b.onclick = () => profilePage(back, b.dataset.edit));
+  $('[data-new]').onclick = () => profilePage(back, 'new');
+  const out = $('[data-out]'); if (out) out.onclick = () => switchProfile(null);
+  if (!ed) return;
+  $('[data-save]').onclick = () => {
+    const name = $('[data-name]').value.trim(), age = +$('[data-age]').value || 0, city = $('[data-city]').value;
+    if (!name) return toast('請輸入名字');
+    if (!age) return toast('請選擇年齡');
+    const all = profiles();
+    const colors = ['#ff6b6b', '#ff922b', '#40c057', '#339af0', '#845ef7', '#f06595', '#20c997'];
+    let p = all.find(x => x.id === ed.id);
+    if (!p) { p = { id: Date.now().toString(36), color: pick(colors) }; all.push(p); }
+    Object.assign(p, { name, age, city });
+    store.set('profiles', all);
+    rawSet(`engAdv_p${p.id}_level`, levelForAge(age));   // 依年齡預設首頁的學習階段
+    switchProfile(p.id);
+  };
+  const del = $('[data-del]');
+  if (del) del.onclick = () => {
+    if (!confirm(`確定要刪除「${ed.name}」嗎？這個學生的進度也會一起刪掉。`)) return;
+    store.set('profiles', profiles().filter(p => p.id !== ed.id));
+    try { Object.keys(localStorage).filter(k => k.startsWith(`engAdv_p${ed.id}_`)).forEach(k => localStorage.removeItem(k)); } catch (e) { }
+    if (cur && cur.id === ed.id) switchProfile(null); else profilePage(back);
+  };
+}
+function drawWhoButton() {
+  const b = $('[data-who]'); if (!b) return;
+  const p = currentProfile();
+  b.innerHTML = p ? `<span class="pf-av sm" style="background:${p.color}">${esc(p.name.slice(0, 1))}</span> ${esc(p.name)}` : '登入';
+}
+
+/* =========================================================
+   發音矯正：逐字比對，全部念清楚才過關，並指出哪些字沒念好
+   ========================================================= */
+const HOMOPHONES = [['to', 'too', 'two'], ['for', 'four'], ['there', 'their', "they're"], ['right', 'write'], ['hear', 'here'], ['know', 'no'],
+  ['see', 'sea'], ['son', 'sun'], ['one', 'won'], ['by', 'buy', 'bye'], ['eight', 'ate'], ['ok', 'okay'], ['meet', 'meat'], ['flower', 'flour'],
+  ['week', 'weak'], ['new', 'knew'], ['red', 'read'], ['blue', 'blew'], ['dear', 'deer'], ['its', 'it is']];
+const sameWord = (a, b) => a === b || HOMOPHONES.some(g => g.includes(a) && g.includes(b));
+/** 比對目標句和電腦聽到的句子，回傳每個字有沒有念到 */
+function pronCheck(target, said) {
+  const raw = target.split(/\s+/).filter(w => stripP(w));
+  const t = raw.flatMap((w, i) => norm(stripP(w)).split(' ').filter(Boolean).map(n => ({ n, i })));
+  const s = norm(said).split(' ').filter(Boolean);
+  const dp = Array.from({ length: t.length + 1 }, () => new Array(s.length + 1).fill(0));
+  for (let i = 1; i <= t.length; i++)
+    for (let j = 1; j <= s.length; j++)
+      dp[i][j] = sameWord(t[i - 1].n, s[j - 1]) ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  const hit = new Set();
+  for (let i = t.length, j = s.length; i > 0 && j > 0;) {
+    if (sameWord(t[i - 1].n, s[j - 1])) { hit.add(i - 1); i--; j--; } else if (dp[i - 1][j] >= dp[i][j - 1]) i--; else j--;
+  }
+  const okWord = raw.map((_, wi) => t.every((x, k) => x.i !== wi || hit.has(k)));
+  const words = raw.map((w, i) => ({ raw: w, ok: okWord[i] }));
+  const missed = words.filter(w => !w.ok).map(w => stripP(w.raw));
+  const extra = Math.max(0, s.length - hit.size);
+  const pct = Math.round((hit.size / Math.max(t.length, s.length - Math.min(extra, 2), 1)) * 100);
+  // 過關條件：每個字都念到（只容許一個兩個字母以內的小字，例如 a、to 被聽錯）
+  const pass = missed.filter(w => w.length > 2).length === 0 && missed.length <= 1 && pct >= 80;
+  return { words, missed, pct: Math.min(100, pct), pass };
+}
+/** 針對台灣學生常見的發音問題給提示 */
+function pronTips(words) {
+  const tips = new Map();
+  for (const raw of words) {
+    const w = raw.toLowerCase();
+    const add = (k, t) => { if (!tips.has(k)) tips.set(k, t); };
+    if (/th/.test(w)) add('th', '「th」：舌尖輕放在上下牙齒中間吐氣（think、this），不要念成 s 或 z。');
+    if (/v/.test(w)) add('v', '「v」：上排牙齒輕碰下唇再發聲（very、five），不要念成 b 或 w。');
+    if (/^r|[bcdfgkpt]r/.test(w)) add('r', '「r」：嘴唇稍微嘟起，舌頭往後捲、不要碰到上顎（red、tree）。');
+    if (/l$|ll$|le$/.test(w)) add('l', '字尾「l」：舌尖要頂住上排牙齒後面（ball、apple），不要念成「歐」。');
+    if (/ng$/.test(w)) add('ng', '「ng」結尾：舌根頂住上顎、用鼻子發音（sing、long）。');
+    if (/ed$/.test(w) && w.length > 3) add('ed', '過去式「-ed」要念出來（played、wanted）。');
+    else if (/[^s']s$|es$/.test(w) && w.length > 3) add('s', '字尾「s」要念出來（books、likes），不要吃掉。');
+    else if (/[tdkpbg]$/.test(w)) add('end', '字尾的子音（t、d、k、p、b、g）要輕輕念出來（cat、bed、book），不要省略。');
+    if (w.length >= 8) add('long:' + w, `「${w}」比較長：按慢速聽清楚重音在哪一節，再一段一段念。`);
+  }
+  if (!tips.size && words.length) tips.set('slow', '先按喇叭聽清楚，嘴巴張大、說慢一點、一個字一個字念清楚。');
+  return [...tips.values()].slice(0, 4);
+}
+/** 發音練習區：按麥克風念 target，全部念清楚才過關 */
+function pronPractice(host, target, o = {}) {
+  const box = document.createElement('div');
+  box.className = 'pron';
+  box.innerHTML = `${o.showText === false ? '' : `<div class="pron-words">${target.split(/\s+/).filter(Boolean).map(w => `<span>${esc(w)}</span>`).join(' ')}</div>`}
+    <div class="row center"><button class="btn primary big" data-mic><i class="ic ic-mic"></i> ${o.micText || '開始說'}</button>${o.skip ? '<button class="btn ghost" data-skip>略過這題</button>' : ''}</div>
+    <div class="pron-out"></div>
+    ${SR ? '' : '<p class="note-s">這個瀏覽器不能語音辨識（請用電腦版 Chrome 或 Edge），可以先按「略過」。</p>'}`;
+  host.appendChild(box);
+  let over = false, tries = 0;
+  const mic = $('[data-mic]', box), out = $('.pron-out', box);
+  mic.onclick = () => {
+    if (over) return;
+    recognize(mic, said => {
+      tries++;
+      const r = pronCheck(target, said);
+      const spans = $$('.pron-words span', box);
+      r.words.forEach((w, i) => { if (spans[i]) spans[i].className = w.ok ? 'g' : 'r'; });
+      if (r.pass) {
+        over = true; mic.disabled = true;
+        const sk = $('[data-skip]', box); if (sk) sk.disabled = true;
+        out.innerHTML = `<div class="pron-ok"><b>過關！</b> ${r.pct} 分　電腦聽到：「${esc(said)}」</div>`;
+        sfx(true);
+        o.onPass && o.onPass(r, tries);
+        return;
+      }
+      sfx(false);
+      out.innerHTML = `<div class="pron-bad"><b>還沒過關（${r.pct} 分）</b>　電腦聽到：「${esc(said)}」
+        ${r.missed.length ? `<div class="pron-miss">這些字沒念清楚：${r.missed.map(w => `<button class="wchip miss" data-say="${esc(w)}" data-slow="1"><i class="ic ic-say"></i> ${esc(w)}</button>`).join('')}</div>` : ''}
+        ${pronTips(r.missed).map(t => `<div class="pron-tip">${esc(t)}</div>`).join('')}
+        <small>點紅色的字聽慢速發音，跟著念幾次，再按「開始說」重來（第 ${tries} 次）。</small></div>`;
+      // Robo 把沒念好的字慢慢念一次
+      if (r.missed.length) setTimeout(() => speakSeq(r.missed.slice(0, 3).map(w => ({ text: w, rate: 0.6 }))), 700);
+      o.onFail && o.onFail(r, tries);
+    }, { continuous: o.continuous, recText: o.continuous ? '<i class="ic ic-stop"></i> 念完了，按這裡' : '<i class="ic ic-stop"></i> 聽你說…（說完按這裡）' });
+  };
+  const sk = $('[data-skip]', box);
+  if (sk) sk.onclick = () => { if (over) return; over = true; mic.disabled = sk.disabled = true; o.onSkip && o.onSkip(); };
+  return box;
+}
+
+/* =========================================================
+   時事聊天：抓維基百科「今日新聞」，依年齡過濾和改寫難度
+   ========================================================= */
+const NEWS_BLOCK = {
+  kid: /\b(kill\w*|dead|death\w*|die|died|dying|war|wars|attack\w*|bomb\w*|shoot\w*|shot|gun\w*|murder\w*|terror\w*|crash\w*|assault\w*|rape\w*|sex\w*|abuse\w*|suicide|drug\w*|massacre\w*|hostage\w*|explosion\w*|militant\w*|invasion|invade\w*|airstrike\w*|genocide|execut\w*|prison\w*|arrest\w*|riot\w*|coup|violen\w*|weapon\w*|missile\w*|earthquake\w*|flood\w*|wildfire\w*|hurricane\w*|typhoon\w*|tornado\w*|victim\w*|injur\w*|wounded|disaster\w*|epidemic|outbreak|scandal\w*|corrupt\w*|impeach\w*|sentenc\w*|trial|protest\w*|election\w*|elected|military|army|soldier\w*|conflict\w*|ceasefire|refugee\w*|nuclear|collapse\w*|fire|allegation\w*|alleged\w*|affair\w*|extramarital|spy|spies|spying|hack\w*|resign\w*|lawsuit\w*|sued|fraud\w*|steal\w*|stole\w*|stolen|theft|jail\w*|court\w*|accus\w*|charged|investigat\w*|police|crime\w*|criminal\w*|cheat\w*|divorce\w*|kidnap\w*|smuggl\w*|sanction\w*|tariff\w*|strike\w*|controvers\w*|ban|banned|fined|bankrupt\w*|layoff\w*|recession|hijack\w*|overdose|alcohol|gambl\w*|casino)\b/i,
+  teen: /\b(kill\w*|dead|death\w*|died|massacre\w*|rape\w*|sex\w*|suicide|terror\w*|bomb\w*|shoot\w*|murder\w*|genocide|execut\w*|hostage\w*|abuse\w*|airstrike\w*|militant\w*|drug\w*)\b/i,
+  adult: /\b(rape\w*|sexual\w*|suicide|massacre\w*|genocide|behead\w*)\b/i,
+};
+// 12 歲以下：新聞除了要通過上面的過濾，還必須是這些適合小朋友的主題
+const NEWS_ALLOW_KID = /\b(sport\w*|football|soccer|baseball|basketball|tennis|swim\w*|olympic\w*|paralympic\w*|marathon|champion\w*|cup|tournament|medal\w*|prize\w*|award\w*|wins?|won|space|nasa|rocket\w*|astronaut\w*|planet\w*|moon|mars|satellite\w*|telescope\w*|comet\w*|star|scien\w*|discover\w*|species|animal\w*|zoo|panda\w*|whale\w*|bird\w*|dinosaur\w*|fossil\w*|museum\w*|film\w*|movie\w*|animat\w*|music\w*|album\w*|song\w*|book\w*|novel\w*|festival\w*|record|robot\w*|invent\w*|ocean\w*|reef\w*|forest\w*|park|bridge|train|art\w*|painting\w*|game\w*|disney|pixar|launch\w*|opens?|opened)\b/i;
+const TOPIC_BANK = {
+  kid: [
+    ['Your favorite sport', 'Many kids in Taiwan love basketball, baseball, swimming and running. Sports keep us healthy and happy.'],
+    ['Animals at the zoo', 'Taipei Zoo has pandas, koalas and penguins. Many families visit the zoo on weekends.'],
+    ['Space and planets', 'There are eight planets in our solar system. Scientists send robots and rockets to learn about them.'],
+    ['Healthy food', 'Fruit and vegetables help us grow strong. Too much candy and soda is not good for our teeth.'],
+    ['Screen time', 'Many children play games on phones and tablets. Doctors say we should also play outside and rest our eyes.'],
+    ['Protecting the ocean', 'Plastic in the sea can hurt fish and turtles. We can help by using less plastic and recycling.'],
+    ['Festivals in Taiwan', 'Taiwan has fun festivals like Chinese New Year, the Dragon Boat Festival and the Moon Festival.'],
+    ['Robots and AI helpers', 'Some robots can clean the floor, and AI can answer questions. People use them to make life easier.'],
+  ],
+  teen: [
+    ['Social media', 'Teenagers spend hours on apps like Instagram and YouTube. It helps them connect, but it can also cause stress.'],
+    ['AI at school', 'More students use AI tools to study. Teachers worry about cheating, but AI can also explain hard ideas.'],
+    ['Climate change', 'Summers are getting hotter. Young people around the world are asking leaders to cut carbon emissions.'],
+    ['Esports', 'Video game competitions now fill big stadiums, and some players earn money like sports stars.'],
+    ['Study pressure', 'Many students in Taiwan go to cram school after class. Some say they need more time to rest.'],
+    ['Smartphone rules', 'Some schools ban phones in class to help students focus. Others think phones are useful learning tools.'],
+  ],
+  adult: [
+    ['AI and jobs', 'Generative AI can write, draw and code. Many workers wonder which jobs will change and which new jobs will appear.'],
+    ['Remote work', 'After the pandemic, many companies let people work from home some days a week.'],
+    ['Housing prices', 'In many big cities, young people find it hard to buy a home because prices keep rising.'],
+    ['Sustainable living', 'More people choose public transport, second-hand clothes and plant-based meals to reduce their impact on the planet.'],
+    ['Travel trends', 'Travelers now look for local experiences, like cooking classes and small towns, instead of only famous sights.'],
+  ],
+};
+const ageGroup = age => (age <= 12 ? 'kid' : age <= 15 ? 'teen' : age <= 18 ? 'teen' : 'adult');
+const stripHtml = h => { const d = document.createElement('div'); d.innerHTML = h || ''; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
+async function fetchNewsTopics(age) {
+  const group = age <= 15 ? 'kid' : age <= 18 ? 'teen' : 'adult';
+  const block = NEWS_BLOCK[group];
+  const okText = (...ts) => ts.every(t => !block.test(t || '')) && (age > 12 || NEWS_ALLOW_KID.test(ts[0] || ''));
+  const out = [];
+  const pad = n => String(n).padStart(2, '0');
+  for (let back = 0; back < 3 && !out.length; back++) {
+    const t = new Date(Date.now() - back * 864e5);
+    try {
+      const r = await fetch(`https://en.wikipedia.org/api/rest_v1/feed/featured/${t.getFullYear()}/${pad(t.getMonth() + 1)}/${pad(t.getDate())}`);
+      if (!r.ok) continue;
+      const j = await r.json();
+      (j.news || []).forEach(n => {
+        const text = stripHtml(n.story), ctx = (n.links && n.links[0] && n.links[0].extract) || '';
+        if (text && okText(text, ctx)) out.push({ kind: '今日新聞', title: text, text, ctx });
+      });
+      if (j.tfa && j.tfa.extract && !block.test(j.tfa.extract) && !block.test(j.tfa.normalizedtitle || '')) out.push({ kind: '今日推薦文章', title: j.tfa.normalizedtitle || j.tfa.title, text: j.tfa.extract, ctx: '' });
+      (j.onthisday || []).slice(0, 12).forEach(e => {
+        const tx = stripHtml(e.text);
+        if (tx && okText(tx)) out.push({ kind: '歷史上的今天', title: `${e.year}: ${tx}`, text: `On this day in ${e.year}, ${tx}`, ctx: '' });
+      });
+    } catch (e) { /* 沒網路或被擋：用下面的話題 */ }
+  }
+  const bank = TOPIC_BANK[ageGroup(age)].map(([title, text]) => ({ kind: '生活話題', title, text, ctx: '' }));
+  return [...out.slice(0, 6), ...sample(bank, out.length ? 3 : 6)];
+}
+
+function newsChat(back) {
+  const p = currentProfile();
+  if (!p || !p.age) {
+    view(`${bar('時事聊天')}<div class="card center"><p class="ask">時事話題會依照你的年齡挑選，請先設定個人資料（名字和年齡）。</p><button class="btn primary" data-pf>設定個人資料</button></div>`, back);
+    $('[data-pf]').onclick = () => profilePage(() => newsChat(back), p ? p.id : 'new');
+    return;
+  }
+  let alive = true;
+  view(`${bar('時事聊天')}
+    <div class="card"><div class="ai-panel-host"></div>
+      <p class="ask">選一個話題，用英文跟 Robo 聊聊（${p.age} 歲適合的內容）</p>
+      <div class="topics"><p class="note-s">正在找今天的新聞…</p></div></div>`, back);
+  onLeave(() => { alive = false; });
+  const host = $('.ai-panel-host'); const panel = document.createElement('div'); host.appendChild(panel);
+  mountAIPanel(panel, () => alive, { offTitle: '時事聊天需要 AI 大腦', offText: '開啟後 Robo 會用適合你年齡的英文介紹新聞，再跟你討論。', onText: 'Robo 會用適合你年齡的英文介紹話題' });
+  fetchNewsTopics(p.age).then(list => {
+    if (!alive) return;
+    $('.topics').innerHTML = list.map((t, i) => `<div class="topic"><span class="badge">${t.kind}</span><p>${esc(t.title.length > 160 ? t.title.slice(0, 160) + '…' : t.title)}</p><button class="btn primary" data-t="${i}">聊這個</button></div>`).join('');
+    $$('[data-t]').forEach(b => b.onclick = () => {
+      if (!aiReady()) return toast('請先按上面的「開啟 AI 大腦」，等它準備好');
+      topicChat(list[+b.dataset.t], () => newsChat(back));
+    });
+  });
+}
+function topicChat(t, back) {
+  const ui = chatUI('時事聊天：' + (t.title.length > 24 ? t.title.slice(0, 24) + '…' : t.title), back);
+  let alive = true, busy = false;
+  onLeave(() => { alive = false; });
+  mountAIPanel(ui.panel(), () => alive, { onText: '依照你的年齡調整難度' });
+  const sys = aiSystem(`Today's conversation topic: "${t.text.slice(0, 700)}"${t.ctx ? `\nBackground information: "${t.ctx.slice(0, 600)}"` : ''}
+Talk about this topic. Explain it in easy words that fit the learner's age, and ask for the learner's opinion or experience. Do not say anything scary or violent.`);
+  const history = [];
+  const ask = async userText => {
+    busy = true;
+    const done = ui.typing();
+    history.push({ role: 'user', content: userText });
+    try {
+      const r = await AI.engine.chat.completions.create({ messages: [{ role: 'system', content: sys }, ...history.slice(-12)], temperature: 0.7, max_tokens: 220 });
+      const raw = r.choices[0].message.content || '';
+      history.push({ role: 'assistant', content: raw });
+      if (!alive) return;
+      done();
+      const a = parseAI(raw);
+      ui.ai(a.en || 'Sorry, can you say that again?', a.zh);
+      ui.chips(a.tryIt ? [a.tryIt] : [], null);
+    } catch (e) {
+      history.pop();
+      if (!alive) return;
+      done();
+      ui.ai('Sorry, my AI brain is not ready. Please try again.', '抱歉，AI 大腦還沒準備好，請再試一次。');
+    }
+    busy = false;
+  };
+  ask('Please introduce today\'s topic to me in a few easy sentences, then ask me a question about it.');
+  ui.onSend((text, typed) => { if (busy) return; ui.me(text, typed); ask(text); });
+}
+
+/* =========================================================
+   問問 AI 老師：自由提問，整理多種說法和使用情境
+   ========================================================= */
+const ASK_EXAMPLES = ['「我喜歡你」有哪些說法？', '「加油」英文怎麼說？', 'How are you? 可以怎麼回答？', 'make 和 do 有什麼不同？', '「不好意思」在不同情況怎麼說？', '怎麼用英文禮貌地拒絕別人？'];
+function askSystem() {
+  const p = currentProfile(), L = ageLevel(p && p.age);
+  return `你是一位親切、專業的英文老師，學生是台灣的${p && p.age ? p.age + ' 歲' : ''}學習者（${L.who}）。學生會用中文或英文問英文學習的問題。
+回答規則：
+- 用繁體中文解釋。英文要自然、正確，難度約 CEFR ${L.cefr}。
+- 如果學生問「某句話有哪些說法」或「怎麼說」，列出 4 到 6 種英文說法，包含正式說法和生活口語。每種說法單獨一行，格式固定為：
+1. 英文句子｜中文意思｜使用情境（例如：正式、朋友之間、浪漫、開玩笑、職場）
+- 如果是文法或用法問題，先用一兩句話說明差別，再用上面同樣的格式給 2 到 4 個例句。
+- 最後一行用「小提醒：」開頭，簡短說明怎麼選用。
+- 不要使用表情符號，不要用 Markdown 標題或表格。`;
+}
+function renderAnswer(text) {
+  return text.split(/\n+/).map(line => {
+    const l = line.trim();
+    if (!l) return '';
+    const m = l.match(/^\s*\d+\s*[.、)）]\s*(.+?)\s*[｜|]\s*(.+?)\s*(?:[｜|]\s*(.+))?$/);
+    if (m && /[A-Za-z]/.test(m[1])) {
+      const en = m[1].replace(/\*\*/g, '').replace(/^["“]|["”]$/g, '');
+      return `<div class="ans-row"><div class="ans-en"><button class="mini" data-say="${esc(en)}"><i class="ic ic-say"></i></button> <b>${esc(en)}</b></div><div class="ans-zh">${esc(m[2])}</div>${m[3] ? `<span class="badge">${esc(m[3])}</span>` : ''}</div>`;
+    }
+    const body = esc(l.replace(/^#+\s*/, '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    return /^小提醒/.test(l) ? `<div class="ans-tip">${body}</div>` : `<p>${body}</p>`;
+  }).join('');
+}
+function askTeacher(back) {
+  let alive = true, busy = false;
+  const history = [];
+  view(`${bar('問問 AI 老師')}
+    <div class="card"><div class="ai-panel-host"></div>
+      <p class="ask">想知道什麼英文都可以問！例如某句話有哪些說法、單字怎麼用、文法差在哪</p>
+      <div class="starters">${ASK_EXAMPLES.map(x => `<button class="chip" data-ex>${esc(x)}</button>`).join('')}</div>
+      <div class="ask-box"><textarea class="write" rows="2" placeholder="在這裡輸入你的問題（中文或英文都可以）"></textarea><button class="btn primary" data-send>問老師</button></div>
+    </div>
+    <div class="answers"></div>`, back);
+  onLeave(() => { alive = false; });
+  const panel = document.createElement('div'); $('.ai-panel-host').appendChild(panel);
+  mountAIPanel(panel, () => alive, { offTitle: '問問 AI 老師需要 AI 大腦', offText: '建議選「比較聰明」，回答會更完整（下載約 2 GB）。', onText: '老師準備好了，問吧！' });
+  const ta = $('textarea.write');
+  $$('[data-ex]').forEach(b => b.onclick = () => { ta.value = b.textContent; ta.focus(); });
+  const send = async () => {
+    const q = ta.value.trim();
+    if (!q || busy) return;
+    if (!aiReady()) return toast('請先按上面的「開啟 AI 大腦」，等它準備好');
+    busy = true; ta.value = '';
+    const item = document.createElement('div');
+    item.className = 'card qa';
+    item.innerHTML = `<div class="qa-q">${esc(q)}</div><div class="qa-a"><span class="dots"><i></i><i></i><i></i></span> 老師正在想…</div>`;
+    $('.answers').prepend(item);
+    const out = $('.qa-a', item);
+    let text = '';
+    try {
+      const stream = await AI.engine.chat.completions.create({
+        messages: [{ role: 'system', content: askSystem() }, ...history.slice(-4), { role: 'user', content: q }],
+        temperature: 0.6, max_tokens: 700, stream: true,
+      });
+      for await (const ch of stream) {
+        if (!alive) return;
+        text += (ch.choices[0] && ch.choices[0].delta && ch.choices[0].delta.content) || '';
+        out.innerHTML = renderAnswer(text.replace(/\p{Extended_Pictographic}|️/gu, ''));
+      }
+      history.push({ role: 'user', content: q }, { role: 'assistant', content: text });
+    } catch (e) {
+      if (alive) out.innerHTML = '<p class="r">抱歉，老師現在沒辦法回答，請再試一次。</p>';
+    }
+    busy = false;
+  };
+  $('[data-send]').onclick = send;
+  ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+}
+
 /* ---------- 開始 ---------- */
 $('.brand').onclick = home;
 $('[data-voice]').onclick = voiceSettings;
+$('[data-who]').onclick = () => profilePage(home);
+drawWhoButton();
 home();
