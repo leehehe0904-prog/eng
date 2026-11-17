@@ -100,7 +100,7 @@ const GRADES = {
     words: [
       ['rabbit', '兔子', '🐰'], ['tiger', '老虎', '🐯'], ['lion', '獅子', '🦁'], ['monkey', '猴子', '🐵'],
       ['elephant', '大象', '🐘'], ['rice', '飯', '🍚'], ['noodles', '麵', '🍜'], ['pizza', '披薩', '🍕'],
-      ['hamburger', '漢堡', '🍔'], ['teacher', '老師', '🧑‍🏫'], ['student', '學生', '🧑‍🎓'], ['doctor', '醫生', '🧑‍⚕️'],
+      ['hamburger', '漢堡', '🍔'], ['teacher', '老師', '👩‍🏫'], ['student', '學生', '👨‍🎓'], ['doctor', '醫生', '👨‍⚕️'],
       ['happy', '開心的', '😄'], ['sad', '難過的', '😢'], ['hungry', '餓的', '🤤'], ['tired', '累的', '😴'],
       ['run', '跑', '🏃'], ['jump', '跳', '🦘'], ['swim', '游泳', '🏊'], ['sing', '唱歌', '🎤'],
     ],
@@ -218,7 +218,7 @@ const GRADES = {
   6: {
     name: '六年級', icon: '🦅', color: '#845ef7', theme: '夢想職業・過去未來・環保・比較',
     words: [
-      ['scientist', '科學家', '🧑‍🔬'], ['engineer', '工程師', '🧑‍🔧'], ['astronaut', '太空人', '🧑‍🚀'], ['firefighter', '消防員', '🧑‍🚒'],
+      ['scientist', '科學家', '👩‍🔬'], ['engineer', '工程師', '👨‍🔧'], ['astronaut', '太空人', '👨‍🚀'], ['firefighter', '消防員', '👩‍🚒'],
       ['museum', '博物館', '🏛️'], ['restaurant', '餐廳', '🍝'], ['dictionary', '字典', '📕'], ['vegetable', '蔬菜', '🥦'],
       ['festival', '節日', '🏮'], ['temperature', '溫度', '🌡️'], ['environment', '環境', '🌏'], ['recycle', '回收', '♻️'],
       ['invention', '發明', '💡'], ['adventure', '冒險', '🗺️'], ['important', '重要的', '❗'], ['interesting', '有趣的', '🤩'],
@@ -458,10 +458,10 @@ const MORE = {
     words: [
       ['orange', '橘子', '🍊'], ['grape', '葡萄', '🍇'], ['lemon', '檸檬', '🍋'], ['peach', '桃子', '🍑'], ['cherry', '櫻桃', '🍒'],
       ['four', '四', '4️⃣'], ['five', '五', '5️⃣'], ['six', '六', '6️⃣'], ['seven', '七', '7️⃣'], ['eight', '八', '8️⃣'],
-      ['nine', '九', '9️⃣'], ['ten', '十', '🔟'], ['black', '黑色', '⚫'], ['white', '白色', '⚪'], ['pink', '粉紅色', '🩷'],
+      ['nine', '九', '9️⃣'], ['ten', '十', '🔟'], ['black', '黑色', '⚫'], ['white', '白色', '⚪'], ['pink', '粉紅色', '💗'],
       ['purple', '紫色', '🟣'], ['brown', '咖啡色', '🟤'], ['cow', '牛', '🐮'], ['horse', '馬', '🐴'], ['bear', '熊', '🐻'],
       ['frog', '青蛙', '🐸'], ['ant', '螞蟻', '🐜'], ['bee', '蜜蜂', '🐝'], ['moon', '月亮', '🌙'], ['star', '星星', '⭐'],
-      ['tree', '樹', '🌳'], ['flower', '花', '🌸'], ['car', '汽車', '🚗'], ['doll', '娃娃', '🪆'], ['kite', '風箏', '🪁'],
+      ['tree', '樹', '🌳'], ['flower', '花', '🌸'], ['car', '汽車', '🚗'], ['doll', '娃娃', '🎎'], ['kite', '風箏', '🪁'],
     ],
     sentences: [
       ['I see a red apple.', '我看到一顆紅蘋果。'], ['The cat is black.', '這隻貓是黑色的。'], ['I have five pens.', '我有五支筆。'],
@@ -475,14 +475,14 @@ const MORE = {
       ['grandpa', '爺爺', '👴'], ['grandma', '奶奶', '👵'], ['uncle', '叔叔', '👨‍🦱'], ['aunt', '阿姨', '👩‍🦰'], ['friend', '朋友', '🧑‍🤝‍🧑'],
       ['hair', '頭髮', '💇'], ['face', '臉', '🙂'], ['tooth', '牙齒', '🦷'], ['arm', '手臂', '💪'], ['leg', '腿', '🦵'],
       ['finger', '手指', '☝️'], ['ruler', '尺', '📏'], ['pencil', '鉛筆', '✏️'], ['crayon', '蠟筆', '🖍️'], ['box', '盒子', '📦'],
-      ['window', '窗戶', '🪟'], ['shirt', '襯衫', '👕'], ['dress', '洋裝', '👗'], ['shoes', '鞋子', '👟'], ['socks', '襪子', '🧦'],
+      ['phone', '電話', '📱'], ['shirt', '襯衫', '👕'], ['dress', '洋裝', '👗'], ['shoes', '鞋子', '👟'], ['socks', '襪子', '🧦'],
       ['coat', '外套', '🧥'], ['cap', '鴨舌帽', '🧢'], ['candy', '糖果', '🍬'], ['cookie', '餅乾', '🍪'], ['water', '水', '💧'],
       ['tea', '茶', '🍵'], ['soup', '湯', '🥣'], ['sandwich', '三明治', '🥪'], ['robot', '機器人', '🤖'], ['sheep', '羊', '🐑'],
       ['chicken', '雞', '🐔'], ['mouse', '老鼠', '🐭'],
     ],
     sentences: [
       ['This is my grandpa.', '這是我的爺爺。'], ['Wash your hands.', '洗你的手。'], ['I have ten fingers.', '我有十根手指。'],
-      ['Can I have a cookie?', '我可以吃一塊餅乾嗎？'], ['Put on your shoes.', '穿上你的鞋子。'], ['Close the window, please.', '請關窗戶。'],
+      ['Can I have a cookie?', '我可以吃一塊餅乾嗎？'], ['Put on your shoes.', '穿上你的鞋子。'], ['Answer the phone, please.', '請接電話。'],
       ['My aunt has a dog.', '我的阿姨有一隻狗。'], ['I want some water.', '我想要一些水。'], ['The robot is cool.', '這個機器人很酷。'],
       ['Where is my pencil?', '我的鉛筆在哪裡？'], ['It is in the box.', '它在盒子裡。'], ['She is my friend.', '她是我的朋友。'],
       ['Brush your teeth.', '刷你的牙齒。'],
@@ -492,7 +492,7 @@ const MORE = {
     words: [
       ['panda', '熊貓', '🐼'], ['zebra', '斑馬', '🦓'], ['giraffe', '長頸鹿', '🦒'], ['snake', '蛇', '🐍'], ['koala', '無尾熊', '🐨'],
       ['penguin', '企鵝', '🐧'], ['dolphin', '海豚', '🐬'], ['dumplings', '水餃', '🥟'], ['salad', '沙拉', '🥗'], ['fries', '薯條', '🍟'],
-      ['corn', '玉米', '🌽'], ['carrot', '紅蘿蔔', '🥕'], ['nurse', '護士', '💉'], ['farmer', '農夫', '🧑‍🌾'], ['cook', '廚師', '🧑‍🍳'],
+      ['corn', '玉米', '🌽'], ['carrot', '紅蘿蔔', '🥕'], ['nurse', '護士', '💉'], ['farmer', '農夫', '👨‍🌾'], ['cook', '廚師', '👩‍🍳'],
       ['police', '警察', '👮'], ['driver', '司機', '🚖'], ['angry', '生氣的', '😠'], ['scared', '害怕的', '😨'], ['sleepy', '想睡的', '🥱'],
       ['thirsty', '口渴的', '🥤'], ['dance', '跳舞', '💃'], ['read', '閱讀', '📰'], ['write', '寫', '✍️'], ['draw', '畫畫', '🎨'],
       ['fly', '飛', '🕊️'], ['climb', '爬', '🧗'], ['skate', '溜冰', '⛸️'], ['cry', '哭', '😭'], ['laugh', '笑', '😂'], ['walk', '走路', '🚶'],
@@ -512,7 +512,7 @@ const MORE = {
       ['violin', '小提琴', '🎻'], ['drum', '鼓', '🥁'], ['trumpet', '喇叭', '🎺'], ['sweater', '毛衣', '🧶'], ['shorts', '短褲', '🩳'],
       ['pants', '長褲', '👖'], ['gloves', '手套', '🧤'], ['scarf', '圍巾', '🧣'], ['boots', '靴子', '🥾'], ['noon', '中午', '🕛'],
       ['night', '晚上', '🌃'], ['afternoon', '下午', '🌇'], ['evening', '傍晚', '🌆'], ['shower', '淋浴', '🚿'], ['bath', '泡澡', '🛀'],
-      ['sleep', '睡覺', '🛌'], ['wake', '醒來', '🌄'], ['fan', '扇子', '🪭'], ['toothbrush', '牙刷', '🪥'], ['snack', '點心', '🍿'],
+      ['sleep', '睡覺', '🛌'], ['wake', '醒來', '🌄'], ['radio', '收音機', '📻'], ['soap', '肥皂', '🧼'], ['snack', '點心', '🍿'],
     ],
     sentences: [
       ['It is cold and windy.', '天氣又冷又有風。'], ['Put on your gloves.', '戴上你的手套。'], ['What time do you get up?', '你幾點起床？'],
@@ -529,7 +529,7 @@ const MORE = {
       ['scooter', '機車', '🛵'], ['truck', '卡車', '🚚'], ['helicopter', '直升機', '🚁'], ['Christmas', '聖誕節', '🎄'], ['Halloween', '萬聖節', '🎃'],
       ['gift', '禮物', '🎁'], ['card', '卡片', '💌'], ['shop', '商店', '🏪'], ['market', '市場', '🧺'], ['dollar', '元', '💲'],
       ['new', '新的', '🆕'], ['old', '舊的；老的', '🏚️'], ['clean', '乾淨的', '🧼'], ['dirty', '髒的', '🗑️'], ['fast', '快的', '⚡'],
-      ['slow', '慢的', '🐢'], ['heavy', '重的', '🏋️'], ['light', '輕的', '🪶'], ['near', '近的', '📍'], ['far', '遠的', '🔭'], ['popular', '受歡迎的', '🌟'],
+      ['slow', '慢的', '🐢'], ['heavy', '重的', '🏋️'], ['light', '輕的', '🎈'], ['near', '近的', '📍'], ['far', '遠的', '🔭'], ['popular', '受歡迎的', '🌟'],
     ],
     sentences: [
       ['I go to school by MRT.', '我搭捷運去上學。'], ['How much is the gift?', '這個禮物多少錢？'], ['It is fifty dollars.', '它是五十元。'],
@@ -541,8 +541,8 @@ const MORE = {
   },
   6: {
     words: [
-      ['pilot', '飛行員', '🧑‍✈️'], ['artist', '藝術家', '🧑‍🎨'], ['singer', '歌手', '🧑‍🎤'], ['writer', '作家', '🖋️'], ['reporter', '記者', '🎙️'],
-      ['programmer', '程式設計師', '🧑‍💻'], ['planet', '行星', '🪐'], ['space', '太空', '🌌'], ['rocket', '火箭', '🚀'], ['ocean', '海洋', '🐋'],
+      ['pilot', '飛行員', '👨‍✈️'], ['artist', '藝術家', '👩‍🎨'], ['singer', '歌手', '👩‍🎤'], ['writer', '作家', '🖋️'], ['reporter', '記者', '🎙️'],
+      ['programmer', '程式設計師', '👨‍💻'], ['planet', '行星', '🪐'], ['space', '太空', '🌌'], ['rocket', '火箭', '🚀'], ['ocean', '海洋', '🐋'],
       ['forest', '森林', '🌲'], ['trash', '垃圾', '🚮'], ['plastic', '塑膠', '🧴'], ['energy', '能源', '🔋'], ['pollution', '污染', '🏭'],
       ['electricity', '電力', '🔌'], ['math', '數學', '➗'], ['English', '英文', '🔤'], ['music', '音樂', '🎵'], ['art', '美術', '🖼️'],
       ['contest', '比賽', '🏆'], ['prize', '獎品', '🥇'], ['dream', '夢想', '💭'], ['future', '未來', '🔮'], ['habit', '習慣', '🗓️'],

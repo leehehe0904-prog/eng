@@ -73,7 +73,7 @@ const GEPT = {
     { pic: '👧🚌🏫', q: 'How does the girl go to school?', opts: ['By bike.', 'On foot.', 'By bus.'], a: 2 },
     { pic: '🎂🎁🥳', q: 'What are they doing?', opts: ['They are having a birthday party.', 'They are doing their homework.', 'They are taking a test.'], a: 0 },
     { pic: '👕 $120', q: 'How much is the T-shirt?', opts: ["It's one hundred and twelve dollars.", "It's one hundred and twenty dollars.", "It's two hundred dollars."], a: 1 },
-    { pic: '🧑‍⚕️🤒🛏️', q: 'Where is the boy?', opts: ['He is in the hospital.', 'He is at the bakery.', 'He is at the zoo.'], a: 0 },
+    { pic: '👨‍⚕️🤒🛏️', q: 'Where is the boy?', opts: ['He is in the hospital.', 'He is at the bakery.', 'He is at the zoo.'], a: 0 },
     { pic: '🏊‍♀️🌊☀️', q: 'What is the woman doing?', opts: ['She is cooking.', 'She is swimming.', 'She is singing.'], a: 1 },
     { pic: '🐱🛋️', q: 'Where is the cat?', opts: ['It is on the sofa.', 'It is in the box.', 'It is under the tree.'], a: 0 },
     { pic: '👨‍🦳📖👓', q: 'What is the old man doing?', opts: ['He is writing a letter.', 'He is reading a book.', 'He is watching TV.'], a: 1 },
