@@ -631,3 +631,17 @@ body {
 .mini.slow { background: var(--green-l); border-color: #96f2d7; color: #087f5b; font-weight: 700; }
 .ex-item { display: inline-flex; align-items: center; gap: 4px; background: #fff; border-radius: 99px; padding: 2px 6px 2px 2px; }
 .feedback .say-mini { margin-left: 4px; }
+
+/* ---------- 學校題庫（老師出題） ---------- */
+.bank-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.bank { display: flex; align-items: center; gap: 10px; background: var(--green-l); border-radius: 14px; padding: 10px 12px; }
+.bank > div { flex: 1; display: flex; flex-direction: column; }
+.bank small { color: var(--muted); }
+.bank-form label { display: block; margin: 10px 0; font-weight: 700; }
+.bank-form .type-in { display: block; width: 100%; margin-top: 4px; font-size: 17px; padding: 8px 12px; }
+.bank-form textarea.write { margin-top: 4px; font-size: 17px; }
+.share-box { background: var(--purple-l); border-radius: 14px; padding: 12px 14px; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.share-box textarea { font-size: 13px; background: #fff; word-break: break-all; }
+.share-box small { color: var(--muted); }
+.school-empty { background: var(--yellow-l); border-radius: 12px; padding: 10px 14px; }
+@media (max-width: 640px) { .bank { flex-wrap: wrap; } }

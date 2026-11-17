@@ -16,7 +16,7 @@ const ABC = 'ABCD';
 const PRAISE = ['Great! 好棒！', 'Good job! 做得好！', 'Excellent! 太厲害了！', 'Super! 超棒！', 'Well done! 很好！', 'Awesome! 讚！'];
 
 /* 儲存：每個學生（個人資料）的進度分開存；語音、AI、學生名單是整台電腦共用 */
-const GLOBAL_KEYS = new Set(['voice', 'ai', 'profiles', 'pid']);
+const GLOBAL_KEYS = new Set(['voice', 'ai', 'profiles', 'pid', 'banks']);
 const rawGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
 const rawSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 無痕模式等情況就不存 */ } };
 const storeKey = k => {
@@ -1121,6 +1121,8 @@ const DAILY_FOR = g => (GRADES[g].level !== 'elem' ? [] : +g <= 2 ? ['polite', '
 function home() {
   const lv = store.get('level', 'elem');
   const best = store.get('best', {});
+  const me = currentProfile();
+  const myBanks = me && me.school ? banksFor(me.school) : [];
   view(`
     <section class="hero">
       <div><h1>英文小冒險 <span>English Adventure</span></h1><p>點一個年級就開始答題！一路練到英檢初級 </p></div>
@@ -1130,6 +1132,9 @@ function home() {
     <div class="levels">${LEVELS.map(l => `<button class="lv ${l.id === lv ? 'on' : ''}" data-lv="${l.id}"><b>${l.name}</b><small>${l.sub}</small></button>`).join('')}</div>
     <h3 class="sec">選擇年級，直接開始</h3>
     <div class="grades">${GRADE_KEYS.filter(g => GRADES[g].level === lv).map(g => { const G = GRADES[g], b = best[`${g}-all`]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi${G.badge ? ' sm' : ''}">${G.badge || g}</span><b>${G.name}</b><small>${G.theme}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
+    ${me && me.school ? `<h3 class="sec">我的學校題庫・${esc(me.school.replace(/（.*$/, ''))}</h3>
+      ${myBanks.length ? `<div class="modes">${myBanks.map(b => modeCard('bk:' + b.id, '', b.title, `${b.words.length} 個單字・${b.sentences.length} 個句子${b.by ? '・' + b.by : ''}`, starsHtml(starsOf(bestOf('bank-' + b.id) || 0)))).join('')}</div>`
+        : '<p class="note-s school-empty">你的學校還沒有專屬題目。請老師到下面的「老師出題」建立題庫，再把分享連結傳給你。</p>'}` : ''}
     <h3 class="sec">更多練習</h3>
     <div class="modes">
       ${modeCard('daily', '', '生活英文', '每天都用得到的句子')}
@@ -1138,14 +1143,19 @@ function home() {
       ${modeCard('ask', '', '問問 AI 老師', '某句話有哪些說法？都可以問')}
       ${modeCard('diary', '', '英文日記', '自己寫英文句子')}
       ${modeCard('works', '', '我的作品', '看看寫過的句子')}
+      ${modeCard('teacher', '', '老師出題', '建立學校專屬題庫並分享')}
     </div>
     <p class="tip"><i class="ic ic-say"></i> 發音使用瀏覽器內建語音・<i class="ic ic-mic"></i> 說話功能建議使用 Chrome 或 Edge・進度會自動存在這台電腦</p>`);
   $('[data-gept]').onclick = geptHome;
   $$('.lv').forEach(b => b.onclick = () => { store.set('level', b.dataset.lv); home(); });
   $$('.grade').forEach(b => b.onclick = () => gradeView(b.dataset.g));
   const back = home;
-  const act = { daily: () => dailyMenu(back), free: () => freeChat(back), news: () => newsChat(back), ask: () => askTeacher(back), diary: () => diary(back), works: () => works(back) };
-  $$('.mode').forEach(b => b.onclick = () => act[b.dataset.m]());
+  const act = { daily: () => dailyMenu(back), free: () => freeChat(back), news: () => newsChat(back), ask: () => askTeacher(back), diary: () => diary(back), works: () => works(back), teacher: () => teacherPage(back) };
+  $$('.mode').forEach(b => b.onclick = () => {
+    const id = b.dataset.m;
+    if (id.startsWith('bk:')) bankQuiz(myBanks.find(x => 'bk:' + x.id === id), back);
+    else act[id]();
+  });
 }
 
 function gradeView(g) {
@@ -2198,9 +2208,188 @@ function askTeacher(back) {
   ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 }
 
+/* =========================================================
+   學校題庫：每間學校自己的題目
+   老師在「老師出題」建立 → 產生分享連結（題目整個包在連結裡）→ 學生點連結匯入
+   或把題庫檔放進 school-banks.js，該校學生自動看到
+   ========================================================= */
+const localBanks = () => store.get('banks', {});
+function banksFor(school) {
+  if (!school) return [];
+  const official = ((window.SCHOOL_BANKS || {})[school] || []).map(b => ({ ...b, official: true }));
+  return [...official, ...(localBanks()[school] || [])];
+}
+function cleanBank(b) {
+  const s = (x, n) => String(x == null ? '' : x).slice(0, n).trim();
+  return {
+    v: 1, id: s(b.id, 40) || Date.now().toString(36), school: s(b.school, 80), title: s(b.title, 60) || '未命名題庫', by: s(b.by, 30),
+    words: (Array.isArray(b.words) ? b.words : []).slice(0, 400).map(w => [s(w[0], 60), s(w[1], 60), s(w[2], 16)]).filter(w => w[0] && w[1]),
+    sentences: (Array.isArray(b.sentences) ? b.sentences : []).slice(0, 300).map(x => [s(x[0], 300), s(x[1], 300)]).filter(x => x[0] && x[1]),
+  };
+}
+function saveLocalBank(b) {
+  const all = localBanks();
+  const list = (all[b.school] = all[b.school] || []);
+  const i = list.findIndex(x => x.id === b.id);
+  if (i >= 0) list[i] = b; else list.push(b);
+  store.set('banks', all);
+}
+function deleteLocalBank(school, id) {
+  const all = localBanks();
+  all[school] = (all[school] || []).filter(x => x.id !== id);
+  if (!all[school].length) delete all[school];
+  store.set('banks', all);
+}
+/** 把題庫壓縮成可以放進網址的文字 */
+const b64u = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = t => { const s = atob(t.replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+async function packBank(b) {
+  let bytes = new TextEncoder().encode(JSON.stringify(b));
+  if (window.CompressionStream) {
+    const st = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return 'z' + b64u(new Uint8Array(await new Response(st).arrayBuffer()));
+  }
+  return 'p' + b64u(bytes);
+}
+async function unpackBank(t) {
+  let bytes = unb64u(t.slice(1));
+  if (t[0] === 'z') {
+    const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    bytes = new Uint8Array(await new Response(st).arrayBuffer());
+  }
+  return cleanBank(JSON.parse(new TextDecoder().decode(bytes)));
+}
+const shareUrl = code => location.href.split('#')[0] + '#bank=' + code;
+/** 解析老師貼上的內容：每行「英文 = 中文」，單字可以再加「= 圖案」 */
+function parseLines(text, withPic) {
+  return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.split(/\s*(?:=|｜|\||\t)\s*/);
+    return withPic ? [p[0], p[1] || '', p[2] || ''] : [p[0], p.slice(1).join(' ') || ''];
+  }).filter(x => x[0] && x[1]);
+}
+const linesOf = (arr, withPic) => arr.map(x => (withPic && x[2] ? `${x[0]} = ${x[1]} = ${x[2]}` : `${x[0]} = ${x[1]}`)).join('\n');
+
+/** 用學校題庫出題 */
+function bankQuiz(b, back) {
+  const W = b.words.map(([en, zh, emoji]) => ({ en, zh, emoji: emoji || '' }));
+  const S = b.sentences.map(([en, zh]) => ({ en, zh }));
+  if (!W.length && !S.length) return toast('這個題庫還沒有題目');
+  const o = {
+    title: b.title, types: GRADE_TYPES.filter(t => t !== 'chatReply'), words: W, sentences: S, dialogues: [],
+    n: Math.min(10, Math.max(4, W.length + S.length)), key: 'bank-' + b.id, againText: '再來一回', menuText: '回首頁', back,
+  };
+  o.rebuild = () => buildQs(o);
+  runQuiz({ ...o, questions: o.rebuild() });
+}
+
+/** 學校名稱搜尋欄（個人資料和老師出題共用） */
+function schoolPicker(input, list, stageSel) {
+  return loadSchools().then(S => {
+    const ks = stageSel ? [{ elem: 'e', jh: 'j', sh: 'h', uni: 'u' }[stageSel]] : ['e', 'j', 'h', 'u'];
+    list.innerHTML = ks.flatMap(k => Object.entries(S[k]).flatMap(([c, arr]) => arr.map(x => { const [n, d] = x.split('|'); return `<option value="${esc(`${n}（${c}${d || ''}）`)}">`; }))).join('');
+  });
+}
+
+function teacherPage(back, editId, autoShare) {
+  const me = currentProfile();
+  const school0 = (me && me.school) || '';
+  const all = localBanks();
+  let ed = null;
+  if (editId) for (const s in all) { const f = all[s].find(b => b.id === editId); if (f) ed = f; }
+  if (editId === 'new' || !ed) ed = ed || (editId === 'new' ? { id: '', school: school0, title: '', by: '', words: [], sentences: [] } : null);
+  const mine = Object.entries(all).flatMap(([s, arr]) => arr.map(b => ({ ...b, school: s })));
+  view(`${bar('老師出題：學校題庫')}
+    <div class="card">
+      <p class="ask">幫你的學校建立專屬題目！學生打開你分享的連結就能練習。</p>
+      <p class="note-s">建好後按「產生分享連結」，用 LINE、班級網頁傳給學生；學生在「個人資料」選同一間學校，首頁就會出現這份題庫。</p>
+      <div class="bank-list">${mine.map(b => `<div class="bank"><div><b>${esc(b.title)}</b><small>${esc(b.school)}・${b.words.length} 個單字・${b.sentences.length} 個句子</small></div>
+        <button class="btn" data-share="${b.id}">分享連結</button><button class="mini" data-edit="${b.id}">編輯</button></div>`).join('') || '<p class="note-s">這台電腦還沒有建立任何題庫。</p>'}</div>
+      <div class="row"><button class="btn primary" data-new>＋ 建立新題庫</button><button class="btn ghost" data-file>從檔案匯入</button><input type="file" accept=".json,application/json" hidden data-fileinput></div>
+      <div class="share-out"></div>
+    </div>
+    ${ed ? `<div class="card bank-form">
+      <h3>${ed.id ? '編輯題庫' : '建立新題庫'}</h3>
+      <label>學校（打學校名稱的一部分搜尋）<input class="type-in" data-school list="bank-schools" value="${esc(ed.school)}" placeholder="例如：文聖" autocomplete="off"><datalist id="bank-schools"></datalist></label>
+      <label>題庫名稱<input class="type-in" data-title value="${esc(ed.title)}" placeholder="例如：五年級上學期 Unit 3 Food" maxlength="60"></label>
+      <label>出題老師（可不填）<input class="type-in" data-by value="${esc(ed.by)}" maxlength="30"></label>
+      <label>單字（一行一個：英文 = 中文，可以再加 = 圖案）<textarea class="write" rows="8" data-words placeholder="apple = 蘋果 = 🍎&#10;banana = 香蕉&#10;delicious = 美味的">${esc(linesOf(ed.words, true))}</textarea></label>
+      <label>句子（一行一句：英文 = 中文）<textarea class="write" rows="6" data-sents placeholder="I like apples. = 我喜歡蘋果。&#10;What do you want to eat? = 你想吃什麼？">${esc(linesOf(ed.sentences))}</textarea></label>
+      <p class="note-s bank-count"></p>
+      <div class="row"><button class="btn primary" data-save>儲存</button><button class="btn" data-try>試做一次</button>${ed.id ? '<button class="btn ghost" data-del>刪除</button>' : ''}</div>
+    </div>` : ''}`, back);
+  const shareOut = $('.share-out');
+  const showShare = async b => {
+    const url = shareUrl(await packBank(cleanBank(b)));
+    shareOut.innerHTML = `<div class="share-box"><b>「${esc(b.title)}」的分享連結</b>
+      <textarea class="write" rows="3" readonly>${esc(url)}</textarea>
+      <div class="row"><button class="btn primary" data-copy>複製連結</button><button class="btn" data-dl>下載題庫檔（放到網站上永久使用）</button></div>
+      <small>連結裡已經包含全部題目，學生點開就會自動匯入。網址${url.length > 6000 ? '比較長，若傳送失敗請改用下載題庫檔' : '長度沒問題'}。</small></div>`;
+    $('[data-copy]', shareOut).onclick = () => { const t = $('textarea', shareOut); t.select(); (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('已複製連結'), () => { document.execCommand('copy'); toast('已複製連結'); }); };
+    $('[data-dl]', shareOut).onclick = () => {
+      const blob = new Blob([JSON.stringify(cleanBank(b), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `題庫-${b.title}.json`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
+    shareOut.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+  $$('[data-share]').forEach(x => x.onclick = () => showShare(mine.find(b => b.id === x.dataset.share)));
+  $$('[data-edit]').forEach(x => x.onclick = () => teacherPage(back, x.dataset.edit));
+  $('[data-new]').onclick = () => teacherPage(back, 'new');
+  const fi = $('[data-fileinput]');
+  $('[data-file]').onclick = () => fi.click();
+  fi.onchange = () => {
+    const f = fi.files[0]; if (!f) return;
+    f.text().then(t => { const b = cleanBank(JSON.parse(t)); if (!b.school) throw new Error('沒有學校'); saveLocalBank(b); toast('已匯入「' + b.title + '」'); teacherPage(back); })
+      .catch(() => toast('這個檔案不是正確的題庫檔'));
+  };
+  if (autoShare && ed && ed.id) showShare(ed);
+  if (!ed) return;
+  schoolPicker($('[data-school]'), $('#bank-schools')).catch(() => { });
+  const collect = () => cleanBank({
+    id: ed.id || Date.now().toString(36), school: $('[data-school]').value.trim(), title: $('[data-title]').value, by: $('[data-by]').value,
+    words: parseLines($('[data-words]').value, true), sentences: parseLines($('[data-sents]').value, false),
+  });
+  const count = () => { const b = collect(); $('.bank-count').textContent = `目前有 ${b.words.length} 個單字、${b.sentences.length} 個句子（至少 4 個單字或 4 個句子，題型才會比較多樣）`; };
+  $('[data-words]').oninput = count; $('[data-sents]').oninput = count; count();
+  $('[data-save]').onclick = () => {
+    const b = collect();
+    if (!b.school) return toast('請選擇學校');
+    if (!b.words.length && !b.sentences.length) return toast('請至少輸入一個單字或句子');
+    if (ed.id && ed.school !== b.school) deleteLocalBank(ed.school, ed.id);
+    saveLocalBank(b); toast('已儲存，可以把分享連結傳給學生');
+    teacherPage(back, b.id, true);
+  };
+  $('[data-try]').onclick = () => { const b = collect(); bankQuiz(b, () => teacherPage(back, ed.id || undefined)); };
+  const del = $('[data-del]');
+  if (del) del.onclick = () => { if (confirm('確定要刪除這份題庫嗎？')) { deleteLocalBank(ed.school, ed.id); teacherPage(back); } };
+}
+
+/** 學生點了老師的分享連結：匯入題庫 */
+async function importFromHash() {
+  const m = location.hash.match(/^#bank=([A-Za-z0-9_-]+)$/);
+  if (!m) return false;
+  history.replaceState(null, '', location.href.split('#')[0]);
+  let b;
+  try { b = await unpackBank(m[1]); } catch (e) { toast('題庫連結壞掉了，請請老師重新分享'); return false; }
+  const me = currentProfile();
+  view(`${bar('匯入學校題庫')}
+    <div class="card center">
+      <p class="ask">老師分享了一份題庫給你</p>
+      <h2>${esc(b.title)}</h2>
+      <p>${esc(b.school)}${b.by ? '・' + esc(b.by) : ''}<br>${b.words.length} 個單字・${b.sentences.length} 個句子</p>
+      ${me && me.school && me.school !== b.school ? `<p class="note-s">你的個人資料是「${esc(me.school)}」，和這份題庫的學校不同；加入後可以在「老師出題」看到它，或把個人資料的學校改成「${esc(b.school)}」。</p>` : ''}
+      <div class="row center"><button class="btn primary big" data-add>加入並開始練習</button><button class="btn" data-no>不要</button></div>
+    </div>`, home);
+  $('[data-add]').onclick = () => { saveLocalBank(b); toast('已加入「' + b.title + '」'); bankQuiz(b, home); };
+  $('[data-no]').onclick = home;
+  return true;
+}
+
 /* ---------- 開始 ---------- */
 $('.brand').onclick = home;
 $('[data-voice]').onclick = voiceSettings;
 $('[data-who]').onclick = () => profilePage(home);
 drawWhoButton();
 home();
+importFromHash();                                    // 從老師的分享連結打開：匯入題庫
+window.addEventListener('hashchange', importFromHash);
