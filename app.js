@@ -162,10 +162,17 @@ function recognize(btn, onText, o = {}) {
   if (activeRec) { activeRec.stop(); return; }
   stopSpeech();
   const r = new SR();
-  r.lang = 'en-US'; r.interimResults = false; r.continuous = !!o.continuous; r.maxAlternatives = 1;
+  r.lang = 'en-US'; r.interimResults = !!o.interim; r.continuous = !!o.continuous; r.maxAlternatives = 1;
   let text = '';
   const label = btn.innerHTML;
-  r.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += ' ' + e.results[i][0].transcript; };
+  r.onresult = e => {
+    let live = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) text += ' ' + e.results[i][0].transcript;
+      else live += ' ' + e.results[i][0].transcript;
+    }
+    if (o.interim) o.interim((text + live).trim());
+  };
   r.onerror = e => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('請允許瀏覽器使用麥克風 🎤');
     else if (e.error === 'no-speech') toast('沒有聽到聲音，再試一次 🎤');
@@ -180,6 +187,27 @@ function recognize(btn, onText, o = {}) {
   btn.innerHTML = o.recText || '⏹ 正在聽…（按這裡結束）';
   activeRec = r;
   try { r.start(); } catch (err) { activeRec = null; btn.classList.remove('rec'); btn.innerHTML = label; }
+}
+/** 用說的輸入：說話時文字即時出現在輸入框，說完後自己檢查、再按送出 */
+function micToInput(btn, inp, o = {}) {
+  if (activeRec) { activeRec.stop(); return; }   // 再按一次 = 說完了
+  if (inp.disabled) return;
+  const before = inp.value;
+  inp.classList.add('listening');
+  recognize(btn, t => {
+    inp.classList.remove('listening');
+    inp.value = cap(t);
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    toast('✅ 說完了！看看文字對不對，可以修改，再按送出');
+  }, { recText: o.recText || '⏹', continuous: o.continuous, interim: t => { inp.value = t; } });
+  // 沒聽到任何聲音時，恢復原本的內容
+  const restore = setInterval(() => {
+    if (activeRec) return;
+    clearInterval(restore);
+    inp.classList.remove('listening');
+    if (!inp.value.trim()) inp.value = before;
+  }, 300);
 }
 
 /* ---------- 音效、提示、彩帶 ---------- */
@@ -339,7 +367,7 @@ function typeAnswer(el, check, done, rev, o = {}) {
   box.innerHTML = `${o.mic && SR ? '<button class="mic" type="button" title="用說的">🎤</button>' : ''}<input class="type-in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${o.ph || '在這裡輸入英文'}"><button class="btn primary" data-go>✔ 檢查</button>`;
   el.appendChild(box);
   const inp = $('input', box), b = $('[data-go]', box), mic = $('.mic', box);
-  if (mic) mic.onclick = () => { if (!inp.disabled) recognize(mic, t => { inp.value = t; go(); }, { recText: '⏹' }); };
+  if (mic) mic.onclick = () => micToInput(mic, inp);
   setTimeout(() => inp.focus({ preventScroll: true }), 50);
   const go = () => {
     if (!inp.value.trim()) { inp.focus(); return; }
@@ -1037,7 +1065,7 @@ function chatUI(title, back) {
   let handler = () => { };
   const scroll = () => { msgs.scrollTop = msgs.scrollHeight; };
   form.onsubmit = e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; inp.value = ''; handler(t, true); };
-  $('.mic', form).onclick = e => recognize(e.currentTarget, t => handler(t, false), { recText: '⏹' });
+  $('.mic', form).onclick = e => micToInput(e.currentTarget, inp);
   setTimeout(() => inp.focus({ preventScroll: true }), 100);
   return {
     ai(text, zh) {
@@ -1452,7 +1480,7 @@ function speakAnswer() {
         <details class="sample"><summary>👀 看題目</summary><p><b>${esc(q.q)}</b><br><small>${esc(q.zh)}</small></p></details>
         <div class="countdown"><div class="cd-bar"><div></div></div><span>15</span></div>
         <div class="row center"><button class="btn primary big" data-mic>🎤 開始回答</button></div>
-        <div class="type-alt"><input class="type-in" placeholder="沒有麥克風？也可以打字回答…" autocomplete="off"><button class="btn" data-type>送出</button></div>
+        <div class="type-alt"><input class="type-in" placeholder="說的話會出現在這裡（也可以直接打字）" autocomplete="off"><button class="btn primary" data-type>送出</button></div>
         <div class="said"></div>
         <div class="row center"><button class="btn" data-next>下一題 ➡</button></div>
       </div>`, geptHome);
@@ -1480,8 +1508,8 @@ function speakAnswer() {
       $('.said').innerHTML = `你的回答：「${esc(t)}」${checkListHtml(tips)}<div class="samples"><b>💡 參考回答：</b>${q.samples.map(s => `<div>${esc(s)} <button class="mini" data-say="${esc(s)}">🔊</button></div>`).join('')}</div>`;
       $('.sample').open = true;
     };
-    $('[data-mic]').onclick = e => recognize(e.currentTarget, judge, { continuous: true, recText: '⏹ 說完了，按這裡' });
     const ti = $('.type-alt input');
+    $('[data-mic]').onclick = e => micToInput(e.currentTarget, ti, { continuous: true, recText: '⏹ 說完了，按這裡' });
     $('[data-type]').onclick = () => { if (ti.value.trim()) judge(ti.value.trim()); };
     ti.onkeydown = e => { if (e.key === 'Enter') $('[data-type]').click(); };
     $('[data-next]').onclick = () => { i++; draw(); };
