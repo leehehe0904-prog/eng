@@ -2518,7 +2518,8 @@ function subjectHome(id) {
   const myBanks = me && me.school ? banksFor(me.school).filter(b => b.subject === id) : [];
   view(`${bar(S.name)}
     <div class="grade-head" style="--c:${S.color}"><div><h2>${S.name}</h2><p>${S.desc}${id === 'math' ? '・每次都是新題目' : '・每次 10 題，做過的題目會最後才再出現'}</p></div></div>
-    ${id === 'code' ? `<button class="k-banner" data-lab style="--c:#087f5b"><span><b>程式編輯器</b><small>自己寫 Python 或 JavaScript，按下執行馬上看到結果；附範例程式</small></span><span class="go">開始寫程式 →</span></button>` : ''}
+    ${id === 'code' ? `<button class="k-banner" data-lab style="--c:#087f5b"><span><b>程式編輯器</b><small>自己寫 Python 或 JavaScript，按下執行馬上看到結果；附範例程式</small></span><span class="go">開始寫程式 →</span></button>
+      <button class="k-banner" data-guide style="--c:#1971c2"><span><b>Python 完整教學</b><small>${CODE_GUIDE.length} 章：輸出與 \\n 跳脫字元、變數、字串、迴圈、串列、字典、函式、錯誤處理、類別…每章都能直接執行</small></span><span class="go">從頭學 →</span></button>` : ''}
     <button class="k-banner" data-know style="--c:${S.color}"><span><b>${S.name}重點整理（知識庫）</b><small>先讀懂重點，再來做題目：${(SUBJECT_LEVELS.map(l => (KNOWLEDGE[id] || {})[l.id] || []).flat()).length} 個主題，可以搜尋${id === 'sci' ? '、有圖解' : ''}</small></span><span class="go">讀重點 →</span></button>
     <h3 class="sec">選擇程度，直接開始</h3>
     <div class="grades">${SUBJECT_LEVELS.map(l => { const b = bestOf(`${id}-${l.id}`); return `<button class="grade" style="--c:${S.color}" data-l="${l.id}"><span class="gi sm">${l.badge}</span><b>${l.name}</b><small>${l.sub}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${l.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
@@ -2531,6 +2532,7 @@ function subjectHome(id) {
   $$('.grade').forEach(b => b.onclick = () => (b.dataset.w ? hanziQuiz(b.dataset.w, () => subjectHome(id)) : subjectQuiz(id, b.dataset.l)));
   $('[data-know]').onclick = () => knowledgePage(id, null, () => subjectHome(id));
   const lab = $('[data-lab]'); if (lab) lab.onclick = () => codeLab(() => subjectHome(id));
+  const guide = $('[data-guide]'); if (guide) guide.onclick = () => codeGuide(() => subjectHome(id));
   $$('.mode').forEach(b => b.onclick = () => {
     const m = b.dataset.m;
     if (m === 'teacher') teacherPage(() => subjectHome(id), 'new', false, id);
@@ -2775,7 +2777,7 @@ function codeLab(back, lang, code, input) {
       <pre class="console"><span class="dim">按「執行」看結果</span></pre>
       <p class="note-s">程式在你的瀏覽器裡執行。${lang === 'python' ? 'Python 第一次使用要下載執行環境（約 10 MB），之後會快很多。' : ''}執行超過 ${RUN_LIMIT_MS / 1000} 秒會自動停止（避免無窮迴圈）。</p>
     </div>
-    <div class="modes">${modeCard('know', '', '程式重點整理', '從運算思維到演算法')}${modeCard('quiz', '', '程式小測驗', '選擇題練習')}</div>`, back);
+    <div class="modes">${modeCard('guide', '', 'Python 完整教學', `${CODE_GUIDE.length} 章，全部語法介紹`)}${modeCard('know', '', '程式重點整理', '從運算思維到演算法')}${modeCard('quiz', '', '程式小測驗', '選擇題練習')}</div>`, back);
   const ed = $('.code-ed'), gut = $('.gutter'), out = $('.console'), inEl = $('.code-in'), status = $('.lab-status');
   const runBtn = $('[data-run]'), stopBtn = $('[data-stop]');
   const save = () => { const s = store.get('code', {}); s.lang = lang; s[lang] = ed.value; s[lang + 'In'] = inEl.value; store.set('code', s); };
@@ -2838,10 +2840,43 @@ function codeLab(back, lang, code, input) {
     if (ed.value.trim() && ed.value !== ex.code && !confirm('要用範例取代目前的程式嗎？（目前的程式會被覆蓋）')) { e.target.value = ''; return; }
     ed.value = ex.code; inEl.value = ex.input || ''; $('.lab-in').open = !!ex.input; lines(); save(); e.target.value = '';
   };
-  $$('.mode').forEach(b => b.onclick = () => (b.dataset.m === 'know' ? knowledgePage('code', null, () => codeLab(back)) : subjectHome('code')));
+  $$('.mode').forEach(b => b.onclick = () => (b.dataset.m === 'know' ? knowledgePage('code', null, () => codeLab(back))
+    : b.dataset.m === 'guide' ? codeGuide(() => codeLab(back)) : subjectHome('code')));
   onLeave(() => { save(); if (running) { killRunner(lang); } });
   // 先在背景載入 Python，按執行時就比較快
   if (lang === 'python') getRunner('python');
+}
+
+/* =========================================================
+   程式：Python 完整教學（全部語法一次看，每章都能直接執行）
+   ========================================================= */
+function codeGuide(back, q = '', openIdx = -1) {
+  const kw = q.trim().toLowerCase();
+  const list = CODE_GUIDE.map((c, i) => ({ ...c, i })).filter(c => !kw || (c.ch + c.t + c.p.join(' ') + c.code).toLowerCase().includes(kw));
+  view(`${bar('Python 完整教學')}
+    <div class="card k-top">
+      <p class="ask">從第一支程式到物件導向，Python 的語法都在這裡。每一章都有範例，按「在編輯器試試」就能執行、修改。</p>
+      <input class="type-in k-search" placeholder="搜尋，例如：\\n、迴圈、字典、class" value="${esc(q)}">
+      ${kw ? `<p class="note-s">找到 ${list.length} 章相關內容</p>` : `<div class="toc">${CODE_GUIDE.map((c, i) => `<button class="lv-chip" data-go="${i}">${esc(c.ch)}</button>`).join('')}</div>`}
+    </div>
+    ${list.map(c => `<details class="card k-topic" id="cg${c.i}" ${kw || c.i === openIdx ? 'open' : ''}>
+      <summary><span class="k-badge">${esc(c.ch.split('.')[0])}</span> ${esc(c.ch.replace(/^\d+\.\s*/, ''))}・${esc(c.t)}</summary>
+      <ul class="k-points">${c.p.map(x => `<li>${kText(x)}</li>`).join('')}</ul>
+      <pre class="k-code">${esc(c.code)}</pre>
+      ${c.input ? `<p class="note-s">這個範例會用到輸入資料：${esc(c.input.replace(/\n/g, '／'))}</p>` : ''}
+      <div class="row"><button class="btn primary" data-try="${c.i}">在編輯器試試</button>${c.i + 1 < CODE_GUIDE.length ? `<button class="btn ghost" data-next="${c.i + 1}">下一章 →</button>` : ''}</div>
+    </details>`).join('') || '<div class="card center"><p>沒有找到，換個關鍵字試試看。</p></div>'}`, back);
+  const inp = $('.k-search');
+  let timer = null;
+  inp.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = inp.value; codeGuide(back, v); const n = $('.k-search'); n.focus(); n.setSelectionRange(v.length, v.length); }, 350); };
+  const openCh = i => { const d = $('#cg' + i); if (!d) return; d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  $$('[data-go]').forEach(b => b.onclick = () => openCh(+b.dataset.go));
+  $$('[data-next]').forEach(b => b.onclick = () => openCh(+b.dataset.next));
+  $$('[data-try]').forEach(b => b.onclick = () => {
+    const c = CODE_GUIDE[+b.dataset.try];
+    codeLab(() => codeGuide(back, q, c.i), c.lang || 'python', c.code, c.input || '');
+  });
+  if (openIdx >= 0 && !kw) setTimeout(() => openCh(openIdx), 50);
 }
 
 /* ---------- 開始 ---------- */
