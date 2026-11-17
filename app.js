@@ -34,10 +34,16 @@ const ALL_WORDS = GRADE_KEYS.flatMap(k => GRADES[k].W);
 const TTS = 'speechSynthesis' in window;
 const CLIPS = window.AUDIO_CLIPS || {};
 const VOICE = { m: null, f: null };
-const voicePref = () => store.get('voice', { name: '', rate: 1 });
+const voicePref = () => {
+  const p = store.get('voice', { name: '', rate: 1 });
+  // 舊版自動存到的 Multilingual（多語言）聲音念單字常常念錯，沒有特別確認過就不用
+  if (/multilingual/i.test(p.name) && !p.sure) p.name = '';
+  return p;
+};
+const isMulti = v => /multilingual/i.test(v.name);
 
-// 高品質男聲排序：越前面越好
-const MALE_RANK = [/(andrew|brian|guy|christopher|eric|roger|steffan|davis|tony|jason|ryan).*(natural|online)/i,
+// 高品質男聲排序：越前面越好（只限純英文的聲音；多語言聲音念單一單字容易判斷錯語言）
+const MALE_RANK = [/\b(andrew|guy|christopher|brian|eric|roger|steffan|davis|tony|jason|ryan)\b.*(natural|online)/i,
   /(natural|online|neural).*(male|andrew|brian|guy|christopher|eric)/i, /google uk english male/i,
   /\b(aaron|evan|nathan|tom|alex|daniel|fred)\b.*(enhanced|premium)?/i, /\b(david|mark|george|james)\b/i, /(?<!fe)\bmale\b/i];
 const FEMALE_RANK = [/(aria|jenny|ava|emma|michelle|ana|sara|nancy|jane).*(natural|online)/i, /google us english/i,
@@ -54,9 +60,11 @@ function englishVoices() {
 function pickVoices() {
   const en = englishVoices();
   const us = en.filter(v => /en[-_]US/i.test(v.lang));
+  const usOne = us.filter(v => !isMulti(v)), enOne = en.filter(v => !isMulti(v));
   const pref = voicePref().name;
-  VOICE.m = (pref && en.find(v => v.name === pref)) || rankVoice(us, MALE_RANK) || rankVoice(en, MALE_RANK) || us[0] || en[0] || null;
-  VOICE.f = rankVoice(us, FEMALE_RANK) || rankVoice(en, FEMALE_RANK) || VOICE.m;
+  VOICE.m = (pref && en.find(v => v.name === pref)) || rankVoice(usOne, MALE_RANK) || rankVoice(enOne, MALE_RANK)
+    || rankVoice(us, MALE_RANK) || usOne[0] || enOne[0] || en[0] || null;
+  VOICE.f = rankVoice(usOne, FEMALE_RANK) || rankVoice(enOne, FEMALE_RANK) || rankVoice(us, FEMALE_RANK) || VOICE.m;
 }
 if (TTS) { pickVoices(); speechSynthesis.onvoiceschanged = pickVoices; }
 
@@ -109,7 +117,8 @@ function playNext() {
     return;
   }
   if (!TTS || !p.tts) return next();
-  const u = new SpeechSynthesisUtterance(p.tts);
+  // 單一個字後面加句點，語音才會完整、清楚地念出來
+  const u = new SpeechSynthesisUtterance(/^[A-Za-z'-]+$/.test(p.tts) ? p.tts + '.' : p.tts);
   u.lang = 'en-US';
   u.rate = (p.rate || 0.85) * (voicePref().rate || 1);
   const v = p.who === 'W' ? VOICE.f : VOICE.m;
@@ -142,12 +151,12 @@ function voiceSettings() {
   d.innerHTML = `<div class="modal-card">
     <h3><i class="ic ic-say"></i> 語音設定</h3>
     <p class="note-s">${nClips ? `已載入 <b>${nClips}</b> 段高清男聲錄音，題目會優先使用錄音。` : '目前沒有高清錄音檔，使用瀏覽器內建語音。'}<br>沒有錄音的句子會用下面選的聲音。用 <b>Edge 瀏覽器</b>可以選到微軟的自然語音（例如 Andrew、Guy），聲音最好聽。</p>
-    <label>聲音：<select data-v>${vs.map(v => `<option value="${esc(v.name)}" ${VOICE.m && v.name === VOICE.m.name ? 'selected' : ''}>${esc(v.name)}</option>`).join('') || '<option>（這個瀏覽器沒有英文語音）</option>'}</select></label>
+    <label>聲音：<select data-v>${vs.map(v => `<option value="${esc(v.name)}" ${VOICE.m && v.name === VOICE.m.name ? 'selected' : ''}>${esc(v.name)}${isMulti(v) ? "（多語言，單字可能念錯）" : ""}</option>`).join('') || '<option>（這個瀏覽器沒有英文語音）</option>'}</select></label>
     <label>速度：<select data-r>${[[0.8, '慢一點'], [1, '正常'], [1.15, '快一點']].map(([r, t]) => `<option value="${r}" ${+pref.rate === r ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <div class="row center"><button class="btn" data-test>試聽</button><button class="btn primary" data-ok>完成</button></div>
   </div>`;
   document.body.appendChild(d);
-  const save = () => { store.set('voice', { name: $('[data-v]', d).value, rate: +$('[data-r]', d).value }); pickVoices(); };
+  const save = () => { store.set('voice', { name: $('[data-v]', d).value, rate: +$('[data-r]', d).value, sure: true }); pickVoices(); };
   $('[data-v]', d).onchange = save; $('[data-r]', d).onchange = save;
   $('[data-test]', d).onclick = () => { save(); speakSeq([{ text: 'Hello! I am Robo. Let us learn English together.' }]); };
   $('[data-ok]', d).onclick = () => { save(); d.remove(); };
