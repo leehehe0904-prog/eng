@@ -2229,9 +2229,11 @@ function cleanBank(b) {
     words: (Array.isArray(b.words) ? b.words : []).slice(0, 400).map(w => [s(w[0], 60), s(w[1], 60), s(w[2], 16)]).filter(w => w[0] && w[1]),
     sentences: (Array.isArray(b.sentences) ? b.sentences : []).slice(0, 300).map(x => [s(x[0], 300), s(x[1], 300)]).filter(x => x[0] && x[1]),
     mcq: (Array.isArray(b.mcq) ? b.mcq : []).slice(0, 300).map(x => [s(x[0], 300), s(x[1], 100), s(x[2], 100), s(x[3], 100), s(x[4], 100), s(x[5], 300)]).filter(x => x[0] && x[1] && x[2]),
+    chars: (Array.isArray(b.chars) ? b.chars : []).slice(0, 300).map(x => [[...s(x[0], 4)][0] || '', s(x[1], 20), s(x[2], 20)]).filter(x => /\p{Script=Han}/u.test(x[0])),
   };
 }
-const bankSize = b => ((b.subject || 'en') === 'en' ? `${b.words.length} 個單字・${b.sentences.length} 個句子` : `${(b.mcq || []).length} 題選擇題`);
+const bankSize = b => ((b.subject || 'en') === 'en' ? `${b.words.length} 個單字・${b.sentences.length} 個句子`
+  : [(b.mcq || []).length ? `${b.mcq.length} 題選擇題` : '', (b.chars || []).length ? `${b.chars.length} 個生字` : ''].filter(Boolean).join('・') || '0 題');
 const subjName = id => (SUBJECTS.find(s => s.id === (id || 'en')) || SUBJECTS[0]).name;
 function saveLocalBank(b) {
   const all = localBanks();
@@ -2277,10 +2279,18 @@ const linesOf = (arr, withPic) => arr.map(x => (withPic && x[2] ? `${x[0]} = ${x
 
 /** 用學校題庫出題 */
 function bankQuiz(b, back) {
-  if ((b.subject || 'en') !== 'en') {   // 其他科目：選擇題
-    if (!b.mcq.length) return toast('這個題庫還沒有題目');
+  if ((b.subject || 'en') !== 'en') {   // 其他科目：選擇題（國語還可以有寫生字）
+    const chars = b.chars || [];
+    if (!b.mcq.length && !chars.length) return toast('這個題庫還沒有題目');
     const o = { title: b.title, key: 'bank-' + b.id, againText: '再來一回', menuText: '返回', back };
-    o.rebuild = () => lruSample(b.mcq, Math.min(10, b.mcq.length), 'bank' + b.id).map(([q, ans, w1, w2, w3, ex]) => mkMcq(q, ans, [w1, w2, w3], ex));
+    o.rebuild = () => {
+      const nc = chars.length ? Math.min(chars.length, b.mcq.length ? 4 : 10) : 0;
+      const nm = Math.min(10 - nc, b.mcq.length);
+      return shuffle([
+        ...lruSample(b.mcq, nm, 'bank' + b.id).map(([q, ans, w1, w2, w3, ex]) => mkMcq(q, ans, [w1, w2, w3], ex)),
+        ...lruSample(chars, nc, 'bankc' + b.id).map(item => ({ type: 'hanzi', item })),
+      ]);
+    };
     return runQuiz({ ...o, questions: o.rebuild() });
   }
   const W = b.words.map(([en, zh, emoji]) => ({ en, zh, emoji: emoji || '' }));
@@ -2334,6 +2344,9 @@ function teacherPage(back, editId, autoShare, subj) {
       <label>選擇題（一行一題：題目｜正確答案｜錯誤1｜錯誤2｜錯誤3｜解析，解析可不寫）<textarea class="write" rows="10" data-mcq placeholder="臺灣最高的山是？｜玉山｜阿里山｜合歡山｜陽明山｜玉山約 3952 公尺&#10;3 × 7 = ？｜21｜24｜18｜27">${esc(ed.mcq.map(x => x.filter((v, i) => i < 5 || v).join('｜')).join('\n'))}</textarea></label>
       <p class="note-s">正確答案寫在題目後面第一個就好，出題時會自動打亂選項順序。錯誤選項至少寫一個。</p>
       </div>
+      <div class="f-zh">
+      <label>生字（國語用，一行一個：字 = 注音 = 詞語，學生會看筆順、描紅、默寫）<textarea class="write" rows="6" data-chars placeholder="春 = ㄔㄨㄣ = 春天&#10;節 = ㄐㄧㄝˊ = 節日">${esc((ed.chars || []).map(x => x.filter(Boolean).join(' = ')).join('\n'))}</textarea></label>
+      </div>
       <p class="note-s bank-count"></p>
       <div class="row"><button class="btn primary" data-save>儲存</button><button class="btn" data-try>試做一次</button>${ed.id ? '<button class="btn ghost" data-del>刪除</button>' : ''}</div>
     </div>` : ''}`, back);
@@ -2370,19 +2383,20 @@ function teacherPage(back, editId, autoShare, subj) {
     id: ed.id || Date.now().toString(36), school: $('[data-school]').value.trim(), title: $('[data-title]').value, by: $('[data-by]').value,
     subject: $('[data-subject]').value,
     words: parseLines($('[data-words]').value, true), sentences: parseLines($('[data-sents]').value, false), mcq: parseMcq($('[data-mcq]').value),
+    chars: $('[data-subject]').value === 'zh' ? parseLines($('[data-chars]').value, true) : [],
   });
   const isEn = () => $('[data-subject]').value === 'en';
   const count = () => {
     const b = collect();
-    $('.f-en').hidden = !isEn(); $('.f-mcq').hidden = isEn();
-    $('.bank-count').textContent = isEn() ? `目前有 ${b.words.length} 個單字、${b.sentences.length} 個句子（至少 4 個單字或 4 個句子，題型才會比較多樣）` : `目前有 ${b.mcq.length} 題選擇題`;
+    $('.f-en').hidden = !isEn(); $('.f-mcq').hidden = isEn(); $('.f-zh').hidden = $('[data-subject]').value !== 'zh';
+    $('.bank-count').textContent = isEn() ? `目前有 ${b.words.length} 個單字、${b.sentences.length} 個句子（至少 4 個單字或 4 個句子，題型才會比較多樣）` : `目前有 ${bankSize(b)}`;
   };
-  $('[data-words]').oninput = count; $('[data-sents]').oninput = count; $('[data-mcq]').oninput = count; $('[data-subject]').onchange = count; count();
+  $('[data-words]').oninput = count; $('[data-sents]').oninput = count; $('[data-mcq]').oninput = count; $('[data-chars]').oninput = count; $('[data-subject]').onchange = count; count();
   $('[data-save]').onclick = () => {
     const b = collect();
     if (!b.school) return toast('請選擇學校');
     if (isEn() && !b.words.length && !b.sentences.length) return toast('請至少輸入一個單字或句子');
-    if (!isEn() && !b.mcq.length) return toast('請至少輸入一題選擇題（題目｜正確答案｜錯誤選項）');
+    if (!isEn() && !b.mcq.length && !b.chars.length) return toast('請至少輸入一題選擇題（題目｜正確答案｜錯誤選項）或一個生字');
     if (ed.id && ed.school !== b.school) deleteLocalBank(ed.school, ed.id);
     saveLocalBank(b); toast('已儲存，可以把分享連結傳給學生');
     teacherPage(back, b.id, true);
@@ -2461,11 +2475,13 @@ function subjectHome(id) {
     <div class="grade-head" style="--c:${S.color}"><div><h2>${S.name}</h2><p>${S.desc}${id === 'math' ? '・每次都是新題目' : '・每次 10 題，做過的題目會最後才再出現'}</p></div></div>
     <h3 class="sec">選擇程度，直接開始</h3>
     <div class="grades">${SUBJECT_LEVELS.map(l => { const b = bestOf(`${id}-${l.id}`); return `<button class="grade" style="--c:${S.color}" data-l="${l.id}"><span class="gi sm">${l.badge}</span><b>${l.name}</b><small>${l.sub}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${l.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
+    ${id === 'zh' ? `<h3 class="sec">寫生字（看筆順・描紅・默寫）</h3>
+      <div class="grades">${Object.keys(HANZI).map(lv => { const L = SUBJECT_LEVELS.find(l => l.id === lv), b = bestOf('zhw-' + lv); return `<button class="grade hzw" style="--c:#e64980" data-w="${lv}"><span class="gi">${HANZI[lv][0][0]}</span><b>${L.name}</b><small>${HANZI[lv].length} 個生字</small>${starsHtml(starsOf(b || 0))}<span class="gs">${L.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>` : ''}
     ${me && me.school ? `<h3 class="sec">我的學校題庫・${esc(me.school.replace(/（.*$/, ''))}</h3>
-      ${myBanks.length ? `<div class="modes">${myBanks.map(b => modeCard('bk:' + b.id, '', b.title, `${b.mcq.length} 題${b.by ? '・' + b.by : ''}`, starsHtml(starsOf(bestOf('bank-' + b.id) || 0)))).join('')}</div>`
+      ${myBanks.length ? `<div class="modes">${myBanks.map(b => modeCard('bk:' + b.id, '', b.title, `${b.mcq.length ? b.mcq.length + ' 題' : ''}${b.mcq.length && (b.chars || []).length ? '・' : ''}${(b.chars || []).length ? b.chars.length + ' 個生字' : ''}${b.by ? '・' + b.by : ''}`,starsHtml(starsOf(bestOf('bank-' + b.id) || 0)))).join('')}</div>`
         : `<p class="note-s school-empty">你的學校還沒有${S.name}專屬題目，請老師到「老師出題」建立。</p>`}` : ''}
     <div class="modes">${modeCard('teacher', '', '老師出題', `建立學校專屬的${S.name}題庫`)}</div>`, subjectMenu);
-  $$('.grade').forEach(b => b.onclick = () => subjectQuiz(id, b.dataset.l));
+  $$('.grade').forEach(b => b.onclick = () => (b.dataset.w ? hanziQuiz(b.dataset.w, () => subjectHome(id)) : subjectQuiz(id, b.dataset.l)));
   $$('.mode').forEach(b => b.onclick = () => {
     const m = b.dataset.m;
     if (m === 'teacher') teacherPage(() => subjectHome(id), 'new', false, id);
@@ -2476,6 +2492,100 @@ function subjectQuiz(id, lvl) {
   const S = SUBJECTS.find(s => s.id === id), L = SUBJECT_LEVELS.find(l => l.id === lvl);
   const o = { title: `${S.name}・${L.name}`, key: `${id}-${lvl}`, againText: '再來 10 題', menuText: `回${S.name}`, back: () => subjectHome(id) };
   o.rebuild = () => subjectQuestions(id, lvl);
+  runQuiz({ ...o, questions: o.rebuild() });
+}
+
+/* =========================================================
+   國語：寫生字（Hanzi Writer：筆順動畫、描紅、默寫，逐筆檢查）
+   ========================================================= */
+const HANZI_URL = 'https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js';
+function loadHanziWriter() {
+  if (window.HanziWriter) return Promise.resolve(window.HanziWriter);
+  if (loadHanziWriter.p) return loadHanziWriter.p;
+  loadHanziWriter.p = new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = HANZI_URL;
+    s.onload = () => (window.HanziWriter ? ok(window.HanziWriter) : fail(new Error('load')));
+    s.onerror = () => { loadHanziWriter.p = null; fail(new Error('load')); };
+    document.head.appendChild(s);
+  });
+  return loadHanziWriter.p;
+}
+/** 用中文念出詞語（瀏覽器的國語語音） */
+function speakZh(text) {
+  if (!TTS) return;
+  stopSpeech();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'zh-TW'; u.rate = 0.8;
+  const v = speechSynthesis.getVoices().find(x => /zh[-_]TW/i.test(x.lang)) || speechSynthesis.getVoices().find(x => /^zh/i.test(x.lang));
+  if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+const blankWord = (word, ch) => word.replace(ch, '＿');
+
+Q.hanzi = {
+  label: '寫生字',
+  render(el, q, done) {
+    const [ch, zy, word] = q.item;
+    const rev = { head: '這個字是：', en: `${ch}（${zy}）${word}`, say: false };
+    el.innerHTML = `<p class="ask">寫出這個字：<span class="zy">${esc(zy)}</span></p>
+      <div class="hz-word">${esc(blankWord(word, ch))} <button class="mini" data-zh>念給我聽</button></div>
+      <div class="hz-steps"><span data-st="1">1 看筆順</span><span data-st="2">2 描紅</span><span data-st="3">3 默寫</span></div>
+      <div class="hz-box"><div class="hz-pad"></div></div>
+      <div class="hz-msg"></div>
+      <div class="row center"><button class="btn" data-replay>再看一次筆順</button><button class="btn primary" data-go>開始描紅</button><button class="btn ghost" data-skip>略過這個字</button></div>`;
+    $('[data-zh]', el).onclick = () => speakZh(`${ch}，${word}的${ch}`);
+    const pad = $('.hz-pad', el), msg = $('.hz-msg', el), go = $('[data-go]', el), replay = $('[data-replay]', el);
+    let writer = null, step = 1, over = false;
+    const setStep = n => { step = n; $$('[data-st]', el).forEach(s => s.classList.toggle('on', +s.dataset.st === n)); };
+    const size = Math.min(280, Math.max(220, window.innerWidth - 120));
+    const make = outline => {
+      pad.innerHTML = '';
+      writer = HanziWriter.create(pad, ch, {
+        width: size, height: size, padding: 12, showCharacter: false, showOutline: outline,
+        strokeColor: '#364fc7', outlineColor: '#d0d7f5', drawingColor: '#e8590c', drawingWidth: 22,
+        strokeAnimationSpeed: 1.1, delayBetweenStrokes: 250, highlightColor: '#40c057',
+      });
+      return writer;
+    };
+    const finish = ok => { if (over) return; over = true; go.disabled = replay.disabled = true; $('[data-skip]', el).disabled = true; done(ok, rev); };
+    const animate = () => { setStep(1); make(true); msg.textContent = '仔細看每一筆的順序…'; writer.animateCharacter({ onComplete: () => { if (step === 1) msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。'; } }); };
+    const trace = () => {
+      setStep(2); make(true); msg.textContent = '照著淡淡的字，一筆一筆寫（順序要對）';
+      go.textContent = '跳到默寫'; go.onclick = memory;
+      writer.quiz({
+        onMistake: () => { msg.textContent = '這一筆不對喔，注意筆順和方向'; },
+        onCorrectStroke: d => { msg.textContent = `很好！還有 ${d.strokesRemaining} 筆`; },
+        onComplete: () => { sfx(true); msg.textContent = '描得很好！接下來不看字，自己寫寫看'; setTimeout(memory, 900); },
+      });
+    };
+    const memory = () => {
+      setStep(3); make(false); msg.textContent = '不看字，自己寫出來！錯兩次會給提示';
+      go.textContent = '我寫不出來'; go.onclick = () => { msg.textContent = '沒關係，再看一次筆順，記住它'; finish(false); writer.animateCharacter(); };
+      writer.quiz({
+        showHintAfterMisses: 2,
+        onMistake: d => { msg.textContent = `這一筆不對（第 ${d.strokeNum + 1} 筆）`; },
+        onCorrectStroke: d => { msg.textContent = `對了！還有 ${d.strokesRemaining} 筆`; },
+        onComplete: s => {
+          const ok = s.totalMistakes <= 2;
+          msg.textContent = ok ? `寫對了！（錯了 ${s.totalMistakes} 筆）` : `完成了，不過錯了 ${s.totalMistakes} 筆，再多練習幾次`;
+          setTimeout(() => finish(ok), 700);
+        },
+      });
+    };
+    loadHanziWriter().then(() => {
+      animate();
+      go.onclick = trace;
+      replay.onclick = () => { if (!writer) return; const was = step; make(step !== 3); writer.animateCharacter({ onComplete: () => { if (was === 2) trace(); else if (was === 3) memory(); } }); };
+    }).catch(() => { msg.innerHTML = '<span class="r">筆順資料載入失敗，請確認有連上網路</span>'; });
+    $('[data-skip]', el).onclick = () => finish(false);
+  },
+};
+function hanziQuiz(level, back, list, title, key) {
+  const src = list || HANZI[level];
+  const L = SUBJECT_LEVELS.find(l => l.id === level);
+  const o = { title: title || `寫生字・${L ? L.name : ''}`, key: key || `zhw-${level}`, againText: '再寫 10 個字', menuText: '回國語', back };
+  o.rebuild = () => lruSample(src, Math.min(10, src.length), key || `zhw-${level}`).map(item => ({ type: 'hanzi', item }));
   runQuiz({ ...o, questions: o.rebuild() });
 }
 

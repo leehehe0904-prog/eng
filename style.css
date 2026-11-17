@@ -662,3 +662,22 @@ body {
 .mcq-q { font-size: 22px; font-weight: 700; margin: 4px 0 14px; line-height: 1.6; text-align: left; }
 @media (max-width: 640px) { .subjects { grid-template-columns: repeat(2, 1fr); } .mcq-q { font-size: 19px; } }
 .bank-form select { display: block; width: 100%; margin-top: 4px; padding: 8px 12px; border: 3px solid var(--line); border-radius: 12px; font: inherit; font-weight: 500; background: #fff; }
+
+/* ---------- 寫生字 ---------- */
+.zy { font-size: 30px; color: #c2255c; letter-spacing: 2px; margin-left: 6px; }
+.hz-word { font-size: 26px; font-weight: 800; margin: 4px 0 8px; }
+.hz-steps { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; }
+.hz-steps span { padding: 3px 12px; border-radius: 99px; background: #f1f3f5; color: var(--muted); font-size: 14px; font-weight: 700; }
+.hz-steps span.on { background: #e64980; color: #fff; }
+.hz-box { display: flex; justify-content: center; }
+.hz-pad {
+  border: 3px solid #e64980; border-radius: 10px; background-color: #fff; line-height: 0; touch-action: none;
+  background-image:   /* 田字格 */
+    linear-gradient(#ffc9de, #ffc9de), linear-gradient(#ffc9de, #ffc9de),
+    repeating-linear-gradient(45deg, transparent 0 calc(50% - 0.5px), #ffe3ee calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px) 100%);
+  background-size: 100% 2px, 2px 100%, 100% 100%;
+  background-position: center, center, center;
+  background-repeat: no-repeat;
+}
+.hz-msg { min-height: 26px; font-size: 17px; font-weight: 700; color: #5f3dc4; margin: 8px 0; }
+.grade.hzw .gi { font-family: 'Noto Sans TC', 'Microsoft JhengHei', serif; font-size: 30px; }
