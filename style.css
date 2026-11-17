@@ -716,3 +716,24 @@ body {
 .pad-bar .mini.on { background: #7048e8; border-color: #7048e8; color: #fff; }
 .pad canvas { display: block; width: 100%; height: 280px; touch-action: none; cursor: crosshair;
   background-image: linear-gradient(#edf2ff 1px, transparent 1px), linear-gradient(90deg, #edf2ff 1px, transparent 1px); background-size: 24px 24px; }
+
+/* ---------- 程式編輯器 ---------- */
+.lab-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.lang-tabs { display: flex; gap: 6px; }
+.lab-ex { padding: 6px 10px; border: 2px solid var(--line); border-radius: 12px; font: inherit; background: #fff; max-width: 100%; }
+.editor { display: flex; border: 3px solid #0ca678; border-radius: 12px; overflow: hidden; background: #1e2430; }
+.gutter { margin: 0; padding: 12px 8px; min-width: 42px; text-align: right; color: #6c7a89; background: #161b24; font: 15px/1.55 Consolas, 'Courier New', monospace; overflow: hidden; user-select: none; }
+.code-ed { flex: 1; min-width: 0; min-height: 300px; resize: vertical; border: 0; outline: none; padding: 12px; background: #1e2430; color: #e9ecef; caret-color: #ffd43b;
+  font: 15px/1.55 Consolas, 'Courier New', monospace; tab-size: 4; white-space: pre; overflow: auto; }
+.lab-in { margin-top: 10px; }
+.lab-in summary { cursor: pointer; font-weight: 700; color: #087f5b; }
+.code-in { width: 100%; margin-top: 6px; border: 2px solid var(--line); border-radius: 10px; padding: 8px; font: 15px/1.5 Consolas, monospace; }
+.lab-btns { align-items: center; }
+.lab-status { color: var(--muted); font-size: 14px; }
+.console { margin: 8px 0 0; min-height: 120px; max-height: 360px; overflow: auto; background: #0b0f14; color: #d3f9d8; border-radius: 12px; padding: 12px 14px;
+  font: 15px/1.5 Consolas, 'Courier New', monospace; white-space: pre-wrap; word-break: break-word; }
+.console .err { color: #ff8787; }
+.console .hint { color: #ffe066; font-family: 'Noto Sans TC', sans-serif; }
+.console .dim { color: #6c7a89; font-family: 'Noto Sans TC', sans-serif; }
+.k-code { background: #1e2430; color: #e9ecef; border-radius: 12px; padding: 12px 14px; font: 14px/1.55 Consolas, 'Courier New', monospace; overflow-x: auto; white-space: pre; }
+.console .in { color: #74c0fc; }

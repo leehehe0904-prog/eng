@@ -2518,6 +2518,7 @@ function subjectHome(id) {
   const myBanks = me && me.school ? banksFor(me.school).filter(b => b.subject === id) : [];
   view(`${bar(S.name)}
     <div class="grade-head" style="--c:${S.color}"><div><h2>${S.name}</h2><p>${S.desc}${id === 'math' ? '・每次都是新題目' : '・每次 10 題，做過的題目會最後才再出現'}</p></div></div>
+    ${id === 'code' ? `<button class="k-banner" data-lab style="--c:#087f5b"><span><b>程式編輯器</b><small>自己寫 Python 或 JavaScript，按下執行馬上看到結果；附範例程式</small></span><span class="go">開始寫程式 →</span></button>` : ''}
     <button class="k-banner" data-know style="--c:${S.color}"><span><b>${S.name}重點整理（知識庫）</b><small>先讀懂重點，再來做題目：${(SUBJECT_LEVELS.map(l => (KNOWLEDGE[id] || {})[l.id] || []).flat()).length} 個主題，可以搜尋${id === 'sci' ? '、有圖解' : ''}</small></span><span class="go">讀重點 →</span></button>
     <h3 class="sec">選擇程度，直接開始</h3>
     <div class="grades">${SUBJECT_LEVELS.map(l => { const b = bestOf(`${id}-${l.id}`); return `<button class="grade" style="--c:${S.color}" data-l="${l.id}"><span class="gi sm">${l.badge}</span><b>${l.name}</b><small>${l.sub}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${l.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
@@ -2529,6 +2530,7 @@ function subjectHome(id) {
     <div class="modes">${modeCard('teacher', '', '老師出題', `建立學校專屬的${S.name}題庫`)}</div>`, subjectMenu);
   $$('.grade').forEach(b => b.onclick = () => (b.dataset.w ? hanziQuiz(b.dataset.w, () => subjectHome(id)) : subjectQuiz(id, b.dataset.l)));
   $('[data-know]').onclick = () => knowledgePage(id, null, () => subjectHome(id));
+  const lab = $('[data-lab]'); if (lab) lab.onclick = () => codeLab(() => subjectHome(id));
   $$('.mode').forEach(b => b.onclick = () => {
     const m = b.dataset.m;
     if (m === 'teacher') teacherPage(() => subjectHome(id), 'new', false, id);
@@ -2660,19 +2662,186 @@ function knowledgePage(subj, lvl, back, q = '') {
       ${[].concat(t.fig || []).filter(f => figs[f]).map(f => `<figure class="k-fig">${figs[f].svg}<figcaption>${esc(figs[f].cap)}</figcaption></figure>`).join('')}
       <ul class="k-points">${t.p.map(x => `<li>${kText(x)}</li>`).join('')}</ul>
       ${t.ex ? `<div class="k-ex"><b>${subj === 'math' ? '例題' : '例子'}</b>${t.ex.map(x => `<div>${subj === 'en' ? sayMini(x) + ' ' : ''}${esc(x)}</div>`).join('')}</div>` : ''}
+      ${t.code ? `<pre class="k-code">${esc(t.code)}</pre>` : ''}
       ${t.tip ? `<div class="k-tip">記憶小撇步：${kText(t.tip)}</div>` : ''}
-      <div class="row"><button class="btn primary" data-kq="${t.lv}">做${SUBJECT_LEVELS.find(l => l.id === t.lv).name}練習題</button><button class="btn ghost" data-ka="${esc(t.t)}">看不懂？問 AI 老師</button></div>
+      <div class="row">${t.code ? `<button class="btn" data-code="${t.lv}|${t.i}">在編輯器試試</button>` : ''}<button class="btn primary" data-kq="${t.lv}">做${SUBJECT_LEVELS.find(l => l.id === t.lv).name}練習題</button><button class="btn ghost" data-ka="${esc(t.t)}">看不懂？問 AI 老師</button></div>
     </details>`).join('') || '<div class="card center"><p>沒有找到相關的重點，換個關鍵字試試看。</p></div>'}`, back);
   const inp = $('.k-search');
   let timer = null;
   inp.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = inp.value; knowledgePage(subj, lvl, back, v); const n = $('.k-search'); n.focus(); n.setSelectionRange(v.length, v.length); }, 350); };
   $$('[data-kl]').forEach(b => b.onclick = () => knowledgePage(subj, b.dataset.kl, back));
+  $$('[data-code]').forEach(b => b.onclick = () => {
+    const [lv, i] = b.dataset.code.split('|'), t = KNOWLEDGE[subj][lv][+i];
+    codeLab(() => knowledgePage(subj, lv, back), t.lang || 'python', t.code, t.input || '');
+  });
   $$('[data-kq]').forEach(b => b.onclick = () => {
     const lv = b.dataset.kq, here = () => knowledgePage(subj, lv, back);
     if (subj === 'en') { const g = { e1: '1', e2: '3', e3: '5', jh: '8', sh: '11' }[lv]; return gradeView(g); }
     subjectQuiz(subj, lv, here);
   });
   $$('[data-ka]').forEach(b => b.onclick = () => { askTeacher(() => knowledgePage(subj, lvl, back)); setTimeout(() => { const ta = $('textarea.write'); if (ta) ta.value = `請用簡單的方式解釋「${b.dataset.ka}」（${S.name}），並舉例說明。`; }, 50); });
+}
+
+/* =========================================================
+   程式：線上編輯器（Python 用 Pyodide、JavaScript 原生），在 Web Worker 裡執行
+   無窮迴圈會在時間到後被強制停止，不會讓網頁當掉
+   ========================================================= */
+const PYODIDE_BASE = 'https://cdn.jsdelivr.net/pyodide/v0.29.5/full/';
+const RUN_LIMIT_MS = 15000;
+const WORKER_SRC = {
+  python: `importScripts('${PYODIDE_BASE}pyodide.js');
+let py = null;
+const ready = loadPyodide({ indexURL: '${PYODIDE_BASE}' }).then(p => { py = p; postMessage({ t: 'ready' }); }).catch(e => postMessage({ t: 'fail', s: String(e) }));
+onmessage = async e => {
+  await ready;
+  if (!py) return postMessage({ t: 'done', error: true });
+  const lines = e.data.input === '' ? [] : e.data.input.split('\\n'); let i = 0;
+  const dec = new TextDecoder(), dec2 = new TextDecoder();
+  py.setStdout({ write: buf => { postMessage({ t: 'out', s: dec.decode(buf, { stream: true }) }); return buf.length; } });
+  py.setStderr({ write: buf => { postMessage({ t: 'err', s: dec2.decode(buf, { stream: true }) }); return buf.length; } });
+  py.setStdin({ stdin: () => { if (i >= lines.length) return undefined; const v = lines[i++]; postMessage({ t: 'in', s: v + '\\n' }); return v; } });
+  try {
+    await py.loadPackagesFromImports(e.data.code);
+    const ns = py.globals.get('dict')();
+    await py.runPythonAsync(e.data.code, { globals: ns });
+    ns.destroy();
+    postMessage({ t: 'done' });
+  } catch (err) { postMessage({ t: 'err', s: String(err.message || err) }); postMessage({ t: 'done', error: true }); }
+};`,
+  js: `onmessage = e => {
+  const lines = e.data.input === '' ? [] : e.data.input.split('\\n'); let i = 0;
+  const fmt = a => a.map(x => typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch (_) { return String(x); } })()).join(' ');
+  self.console = { log: (...a) => postMessage({ t: 'out', s: fmt(a) + '\\n' }), info: (...a) => postMessage({ t: 'out', s: fmt(a) + '\\n' }), warn: (...a) => postMessage({ t: 'out', s: fmt(a) + '\\n' }), error: (...a) => postMessage({ t: 'err', s: fmt(a) + '\\n' }) };
+  self.input = self.prompt = (q) => { if (q) postMessage({ t: 'out', s: String(q) }); if (i >= lines.length) return null; const v = lines[i++]; postMessage({ t: 'in', s: v + '\\n' }); return v; };
+  self.print = (...a) => self.console.log(...a);
+  try { new Function(e.data.code)(); postMessage({ t: 'done' }); }
+  catch (err) { postMessage({ t: 'err', s: (err.name || 'Error') + ': ' + err.message + '\\n' }); postMessage({ t: 'done', error: true }); }
+};`,
+};
+const RUNNER = { python: null, js: null };
+function getRunner(lang) {
+  if (!RUNNER[lang]) {
+    const url = URL.createObjectURL(new Blob([WORKER_SRC[lang]], { type: 'text/javascript' }));
+    const w = new Worker(url);
+    RUNNER[lang] = { w, ready: lang === 'js', handler: null };
+    w.onmessage = e => { const r = RUNNER[lang]; if (e.data.t === 'ready') r.ready = true; r.handler && r.handler(e.data); };
+    w.onerror = e => { const r = RUNNER[lang]; r.handler && r.handler({ t: 'err', s: (e.message || '執行環境錯誤') + '\n' }); r.handler && r.handler({ t: 'done', error: true }); };
+  }
+  return RUNNER[lang];
+}
+function killRunner(lang) { if (RUNNER[lang]) { RUNNER[lang].w.terminate(); RUNNER[lang] = null; } }
+
+/** 把常見錯誤翻成小朋友看得懂的中文提示 */
+function errorHint(msg, lang) {
+  const tips = [
+    [/IndentationError|unexpected indent|expected an indented block/, '縮排錯了：if、for、def 下面那幾行要往右縮 4 個空格，而且同一層要對齊。'],
+    [/SyntaxError.*(EOF|was never closed|'\(' was never closed)/i, '括號或引號沒有成對：檢查 ( ) 和 " " 是不是都有關起來。'],
+    [/SyntaxError.*expected ':'/, '少了冒號：if、for、while、def 那一行的最後要加「:」。'],
+    [/SyntaxError/, '語法錯誤：檢查拼字、冒號、括號、引號。中文標點（，「」：）不能用在程式裡。'],
+    [/NameError: name '(.+?)' is not defined/, m => `找不到「${m[1]}」：是不是拼錯了，或還沒有先給它值？文字要記得加引號。`],
+    [/ReferenceError: (.+?) is not defined/, m => `找不到「${m[1]}」：是不是拼錯了，或還沒用 let／const 宣告？`],
+    [/TypeError: can only concatenate str|unsupported operand type.*'str'|must be str, not int/, '字串和數字不能直接相加：用 str(數字) 轉成字串，或用 int(文字) 轉成數字。'],
+    [/ZeroDivisionError/, '不能除以 0。'],
+    [/IndexError/, '索引超出範圍：串列的索引從 0 開始，最後一個是 len(串列) - 1。'],
+    [/KeyError/, '字典裡沒有這個鍵：先檢查拼字，或用 d.get(鍵, 預設值)。'],
+    [/ValueError: invalid literal for int/, 'int() 只能轉換像 "123" 這樣的數字文字。檢查「輸入資料」是不是數字。'],
+    [/EOFError/, 'input() 讀不到資料了：請在下方「輸入資料」裡，一行放一筆要輸入的內容。'],
+    [/RecursionError|Maximum call stack/, '遞迴太深：檢查有沒有終止條件。'],
+  ];
+  for (const [re, t] of tips) { const m = msg.match(re); if (m) return typeof t === 'function' ? t(m) : t; }
+  return '';
+}
+/** Python 錯誤訊息只留下跟學生程式有關的部分 */
+function trimPyError(s) {
+  const lines = s.trim().split('\n');
+  const i = lines.findIndex(l => /File "<exec>"/.test(l));
+  return (i >= 0 ? lines.slice(i) : lines.slice(-3)).join('\n').replace(/File "<exec>", /g, '');
+}
+
+function codeLab(back, lang, code, input) {
+  const saved = store.get('code', {});
+  lang = lang || saved.lang || 'python';
+  const cur = code != null ? code : (saved[lang] != null ? saved[lang] : CODE_EXAMPLES[lang][0].code);
+  const inp0 = input != null ? input : (saved[lang + 'In'] || '');
+  view(`${bar('程式編輯器')}
+    <div class="card lab">
+      <div class="lab-top">
+        <div class="lang-tabs">${[['python', 'Python'], ['js', 'JavaScript']].map(([k, n]) => `<button class="lv-chip ${k === lang ? 'on' : ''}" data-lang="${k}">${n}</button>`).join('')}</div>
+        <select class="lab-ex"><option value="">範例程式…</option>${CODE_EXAMPLES[lang].map((e, i) => `<option value="${i}">【${e.lv}】${esc(e.title)}</option>`).join('')}</select>
+      </div>
+      <div class="editor"><pre class="gutter"></pre><textarea class="code-ed" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">${esc(cur)}</textarea></div>
+      <details class="lab-in" ${inp0 ? 'open' : ''}><summary>輸入資料（給 ${lang === 'python' ? 'input()' : 'input()／prompt()'} 用，一行一筆）</summary><textarea class="code-in" rows="3" spellcheck="false">${esc(inp0)}</textarea></details>
+      <div class="row lab-btns"><button class="btn primary big" data-run>執行（Ctrl＋Enter）</button><button class="btn" data-stop disabled>停止</button><button class="btn ghost" data-clear>清除輸出</button><span class="lab-status"></span></div>
+      <pre class="console"><span class="dim">按「執行」看結果</span></pre>
+      <p class="note-s">程式在你的瀏覽器裡執行。${lang === 'python' ? 'Python 第一次使用要下載執行環境（約 10 MB），之後會快很多。' : ''}執行超過 ${RUN_LIMIT_MS / 1000} 秒會自動停止（避免無窮迴圈）。</p>
+    </div>
+    <div class="modes">${modeCard('know', '', '程式重點整理', '從運算思維到演算法')}${modeCard('quiz', '', '程式小測驗', '選擇題練習')}</div>`, back);
+  const ed = $('.code-ed'), gut = $('.gutter'), out = $('.console'), inEl = $('.code-in'), status = $('.lab-status');
+  const runBtn = $('[data-run]'), stopBtn = $('[data-stop]');
+  const save = () => { const s = store.get('code', {}); s.lang = lang; s[lang] = ed.value; s[lang + 'In'] = inEl.value; store.set('code', s); };
+  const lines = () => { const n = ed.value.split('\n').length; gut.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n'); };
+  lines();
+  ed.addEventListener('scroll', () => { gut.scrollTop = ed.scrollTop; });
+  ed.addEventListener('input', () => { lines(); save(); });
+  inEl.addEventListener('input', save);
+  // Tab 縮排、Enter 自動縮排（冒號或 { 後面多縮一層）
+  ed.addEventListener('keydown', e => {
+    const s = ed.selectionStart, v = ed.value, ind = lang === 'python' ? '    ' : '  ';
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); ed.setRangeText(ind, s, ed.selectionEnd, 'end'); lines(); save(); }
+    else if (e.key === 'Enter') {
+      const lineStart = v.lastIndexOf('\n', s - 1) + 1, line = v.slice(lineStart, s);
+      let pad = (line.match(/^\s*/) || [''])[0];
+      if (/[:{\[(]\s*$/.test(line)) pad += ind;
+      e.preventDefault(); ed.setRangeText('\n' + pad, s, ed.selectionEnd, 'end'); lines(); save();
+    }
+  });
+  const write = (s, cls) => { const sp = document.createElement('span'); if (cls) sp.className = cls; sp.textContent = s; out.appendChild(sp); out.scrollTop = out.scrollHeight; };
+  let timer = null, running = false, errText = '';
+  const finish = () => { running = false; clearTimeout(timer); runBtn.disabled = false; stopBtn.disabled = true; const r = RUNNER[lang]; if (r) r.handler = null; };
+  function run() {
+    if (running) return;
+    save();
+    out.textContent = ''; errText = '';
+    running = true; runBtn.disabled = true; stopBtn.disabled = false;
+    const r = getRunner(lang);
+    status.textContent = r.ready ? '執行中…' : 'Python 執行環境載入中…（第一次比較久）';
+    const t0 = performance.now();
+    r.handler = m => {
+      if (m.t === 'ready') status.textContent = '執行中…';
+      else if (m.t === 'fail') { write('Python 執行環境載入失敗，請確認網路連線。\n', 'err'); killRunner(lang); finish(); status.textContent = ''; }
+      else if (m.t === 'out') write(m.s);
+      else if (m.t === 'in') write(m.s, 'in');
+      else if (m.t === 'err') { errText += m.s; write(lang === 'python' ? trimPyError(m.s) + '\n' : m.s, 'err'); }
+      else if (m.t === 'done') {
+        const hint = m.error ? errorHint(errText, lang) : '';
+        if (hint) write('\n提示：' + hint + '\n', 'hint');
+        if (!out.textContent.trim()) write('（程式執行完了，但沒有輸出。要用 ' + (lang === 'python' ? 'print()' : 'console.log()') + ' 才看得到結果）', 'dim');
+        status.textContent = m.error ? '有錯誤' : `完成（${Math.round(performance.now() - t0)} 毫秒）`;
+        finish();
+      }
+    };
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (!running) return;
+      if (!r.ready) return;   // 還在載入 Python，不算執行時間
+      killRunner(lang); write(`\n已停止：程式執行超過 ${RUN_LIMIT_MS / 1000} 秒，可能是無窮迴圈。\n`, 'err'); status.textContent = '已停止'; finish();
+    }, RUN_LIMIT_MS + (r.ready ? 0 : 60000));
+    r.w.postMessage({ code: ed.value, input: inEl.value.replace(/\r/g, '') });
+  }
+  runBtn.onclick = run;
+  stopBtn.onclick = () => { killRunner(lang); write('\n已手動停止。\n', 'err'); status.textContent = '已停止'; finish(); };
+  $('[data-clear]').onclick = () => { out.innerHTML = ''; };
+  $$('[data-lang]').forEach(b => b.onclick = () => { save(); const s = store.get('code', {}); s.lang = b.dataset.lang; store.set('code', s); codeLab(back, b.dataset.lang); });
+  $('.lab-ex').onchange = e => {
+    const ex = CODE_EXAMPLES[lang][+e.target.value]; if (!ex) return;
+    if (ed.value.trim() && ed.value !== ex.code && !confirm('要用範例取代目前的程式嗎？（目前的程式會被覆蓋）')) { e.target.value = ''; return; }
+    ed.value = ex.code; inEl.value = ex.input || ''; $('.lab-in').open = !!ex.input; lines(); save(); e.target.value = '';
+  };
+  $$('.mode').forEach(b => b.onclick = () => (b.dataset.m === 'know' ? knowledgePage('code', null, () => codeLab(back)) : subjectHome('code')));
+  onLeave(() => { save(); if (running) { killRunner(lang); } });
+  // 先在背景載入 Python，按執行時就比較快
+  if (lang === 'python') getRunner('python');
 }
 
 /* ---------- 開始 ---------- */

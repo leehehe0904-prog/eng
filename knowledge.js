@@ -152,3 +152,35 @@ const KNOWLEDGE = {
     ],
   },
 };
+
+// ======================== 程式 ========================
+// 主題可以有 code（程式範例，能直接打開到編輯器執行）和 lang（python / js）
+KNOWLEDGE.code = {
+  e1: [
+    { t: '什麼是程式？', p: ['**程式**是寫給電腦的一步一步指令，電腦會**完全照著做**。', '指令的**順序**很重要：先穿襪子再穿鞋，順序錯了就不對。', '程式出錯叫做 **bug（蟲）**，找出錯誤並修正叫 **debug（除錯）**。', '生活中的程式：紅綠燈、洗衣機、自動門都在執行程式。'], tip: '電腦很聽話，但不會猜你的意思，所以指令要說得清清楚楚。' },
+    { t: '三大結構：順序、重複、條件', p: ['**順序**：一步接一步做。起床 → 刷牙 → 洗臉 → 吃早餐。', '**重複（迴圈）**：同一件事做很多次。跳繩跳 10 下。', '**條件（判斷）**：依照情況決定。如果下雨，就帶傘；否則戴帽子。', '幾乎所有程式都是用這三種結構組合出來的。'] },
+    { t: '輸入、處理、輸出', p: ['**輸入**：把資料給電腦，例如鍵盤、滑鼠、麥克風、相機。', '**處理**：電腦計算、判斷。', '**輸出**：把結果給人看或聽，例如螢幕、喇叭、印表機。', '例：計算機輸入 3 + 5，處理後輸出 8。'] },
+  ],
+  e2: [
+    { t: 'Scratch：事件與角色', p: ['**角色**：舞台上會動的人物或東西；**舞台**：背景。', '**事件**決定程式什麼時候開始：「當綠旗被點擊」「當按下空白鍵」。', '**造型**：同一個角色的不同樣子，快速切換就像動畫。', '**廣播訊息**：讓不同角色互相通知、一起動作。'] },
+    { t: '迴圈與變數', p: ['**重複 N 次**：做固定次數；**重複無限次**：一直做下去。', '畫正多邊形：重複 n 次「移動、右轉 360÷n 度」。', '**變數**像一個貼了名字的盒子，可以存放會改變的數值，例如「分數」「生命值」。', '常見寫法：分數 改變 1（加 1 分）。'], tip: '正方形轉 90 度、正三角形轉 120 度、正六邊形轉 60 度。' },
+    { t: '條件與偵測', p: ['**如果…那麼**：條件成立才做。', '**如果…那麼…否則**：成立做前面，不成立做後面。', '**偵測**積木：碰到顏色、碰到邊緣、滑鼠鍵被按下、和角色的距離。', '例：如果碰到敵人，生命值改變 −1。'] },
+  ],
+  e3: [
+    { t: 'Python 第一步：print', p: ['**print()** 把資料顯示在螢幕上。', '文字要用**引號**包起來："Hello" 或 \'Hello\'；數字不用。', '用逗號可以一次印很多個：print("1 + 1 =", 1 + 1)。', '**#** 後面是註解，給人看的說明，不會被執行。'], code: '# 這是我的第一個程式\nprint("Hello, World!")\nprint("我今年", 10, "歲")', lang: 'python' },
+    { t: '變數與運算', p: ['**變數**存放資料：age = 10（= 是「把右邊的值放進左邊」）。', '運算：**+ − * /**；**//** 整數除法（取商）；**%** 取餘數；**\\*\\*** 次方。', '先乘除後加減，有括號先算括號。', '變數名稱用英文字母開頭，不能有空格，例如 my_score。'], code: 'apples = 17\nkids = 5\nprint("每人分到", apples // kids, "顆")\nprint("剩下", apples % kids, "顆")\nprint("2 的 10 次方是", 2 ** 10)', lang: 'python' },
+    { t: '輸入：input 與型態轉換', p: ['**input()** 讓使用者輸入資料，得到的一定是**字串（str）**。', '要做數學運算，用 **int()** 轉成整數、**float()** 轉成小數。', '"3" + "4" 是 "34"（接起來），3 + 4 才是 7。', '**f 字串**方便組合文字：f"你好，{name}"。'], code: 'name = input("你的名字？")\nage = int(input("你幾歲？"))\nprint(f"{name}，明年你就 {age + 1} 歲了！")', lang: 'python', input: '小明\n10' },
+  ],
+  jh: [
+    { t: 'if 條件判斷', p: ['比較運算子：**==** 等於、**!=** 不等於、**>**、**<**、**>=**、**<=**。', '邏輯運算子：**and**（而且）、**or**（或者）、**not**（不是）。', '**if / elif / else**：由上往下檢查，第一個成立的區塊會被執行。', 'Python 用**縮排**（4 個空格）表示「屬於這個 if 的程式」，冒號 : 不能忘記。'], code: 'temp = 31\nif temp >= 30:\n    print("好熱，記得喝水")\nelif temp >= 20:\n    print("天氣舒服")\nelse:\n    print("有點冷，穿外套")', lang: 'python' },
+    { t: 'for 與 while 迴圈', p: ['**for** 適合「次數固定」或「一個一個拿出來」：for i in range(5)。', '**range(a, b)** 從 a 開始到 b 之前；range(1, 101) 是 1～100。', '**while** 適合「條件成立就一直做」，要記得讓條件最後變成 False，否則會**無窮迴圈**。', '**break** 跳出迴圈；**continue** 跳過這一次。'], code: 'total = 0\nfor n in range(1, 101):\n    total += n\nprint("1 加到 100 =", total)\n\ncount = 3\nwhile count > 0:\n    print("倒數", count)\n    count -= 1\nprint("發射！")', lang: 'python' },
+    { t: '函式 def', p: ['函式把一段程式包起來、取名字，需要時再**呼叫**，可以重複使用。', '**def 函式名(參數):** 定義；**return** 把結果傳回去。', '好處：程式更短、更好讀、更好修改。', 'Python 內建很多函式：print、len、max、min、sum、round。'], code: 'def bmi(weight, height):\n    return weight / (height ** 2)\n\nprint(round(bmi(40, 1.45), 1))\nprint(round(bmi(55, 1.60), 1))', lang: 'python' },
+    { t: '串列 list', p: ['串列可以存很多資料：scores = [90, 85, 77]。', '**索引從 0 開始**：scores[0] 是 90；scores[-1] 是最後一個。', '**append()** 加到最後；**len()** 個數；**sum()** 總和；**sorted()** 排序。', '用 for 把每個元素拿出來：for s in scores:'], code: 'scores = [90, 85, 77, 62, 98]\nscores.append(80)\nprint("人數：", len(scores))\nprint("平均：", sum(scores) / len(scores))\nprint("最高：", max(scores), "最低：", min(scores))\nprint("排序：", sorted(scores))', lang: 'python' },
+  ],
+  sh: [
+    { t: '字串與字典', p: ['字串**切片**：s[開始:結束]，包含開始、不包含結束。"Python"[0:3] 是 "Pyt"。', '常用方法：**split()** 切開、**join()** 接起來、**upper()**、**replace()**。', '**字典 dict** 用「鍵：值」存資料：d = {"apple": 3}；d["apple"] 取值。', '**d.get(k, 0)**：沒有這個鍵時回傳預設值 0，很適合拿來計數。'], code: 'sentence = "I love Python and I love math"\ncount = {}\nfor w in sentence.lower().split():\n    count[w] = count.get(w, 0) + 1\nprint(count)\nprint("Python"[0:3], "Python"[::-1])', lang: 'python' },
+    { t: '搜尋與排序演算法', p: ['**線性搜尋**：從頭一個一個找，O(n)。', '**二分搜尋**：資料**已排序**時，每次和中間比、排除一半，O(log n)。', '**氣泡排序**：相鄰兩個比較、交換，O(n²)。', '更快的排序：合併排序、快速排序，平均 O(n log n)；Python 的 sorted() 很快。', '**時間複雜度**描述資料變多時，執行時間成長得多快。'], code: 'def binary_search(arr, target):\n    lo, hi = 0, len(arr) - 1\n    steps = 0\n    while lo <= hi:\n        steps += 1\n        mid = (lo + hi) // 2\n        if arr[mid] == target:\n            return mid, steps\n        if arr[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return -1, steps\n\ndata = list(range(0, 1000, 3))\nprint(binary_search(data, 501))', lang: 'python' },
+    { t: '遞迴', p: ['**遞迴**：函式呼叫自己，把大問題拆成相同但更小的問題。', '一定要有**終止條件（base case）**，否則會無限呼叫。', '例：n! = n × (n−1)!，0! = 1。', '費氏數列 fib(n) = fib(n−1) + fib(n−2)；直接遞迴很慢，可用記憶化（cache）加速。'], code: 'def factorial(n):\n    if n == 0:        # 終止條件\n        return 1\n    return n * factorial(n - 1)\n\nfor i in range(8):\n    print(f"{i}! = {factorial(i)}")', lang: 'python' },
+    { t: 'JavaScript 基礎', p: ['JavaScript 是網頁的程式語言，瀏覽器都能執行。', '宣告變數：**let**（會改變）、**const**（不會改變）。', '輸出：**console.log()**；區塊用 **{ }**，敘述結尾常加 **;**。', '陣列方法：**map**（每個都變換）、**filter**（篩選）、**forEach**（逐一處理）。', '這個網站本身就是用 JavaScript 寫的！'], code: 'const nums = [3, 8, 1, 6];\nlet total = 0;\nfor (const n of nums) {\n  total += n;\n}\nconsole.log("總和：", total);\nconsole.log("每個乘 2：", nums.map(n => n * 2));', lang: 'js' },
+  ],
+};
