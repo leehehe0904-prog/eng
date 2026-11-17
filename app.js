@@ -1144,6 +1144,7 @@ function home() {
       ${modeCard('ask', '', '問問 AI 老師', '某句話有哪些說法？都可以問')}
       ${modeCard('diary', '', '英文日記', '自己寫英文句子')}
       ${modeCard('works', '', '我的作品', '看看寫過的句子')}
+      ${modeCard('grammar', '', '文法重點', '英文文法重點整理，從國小到高中')}
       ${modeCard('teacher', '', '老師出題', '建立學校專屬題庫並分享')}
     </div>
     <p class="tip"><i class="ic ic-say"></i> 發音使用瀏覽器內建語音・<i class="ic ic-mic"></i> 說話功能建議使用 Chrome 或 Edge・進度會自動存在這台電腦</p>`);
@@ -1152,7 +1153,7 @@ function home() {
   $$('.lv').forEach(b => b.onclick = () => { store.set('level', b.dataset.lv); home(); });
   $$('.grade').forEach(b => b.onclick = () => gradeView(b.dataset.g));
   const back = home;
-  const act = { daily: () => dailyMenu(back), free: () => freeChat(back), news: () => newsChat(back), ask: () => askTeacher(back), diary: () => diary(back), works: () => works(back), teacher: () => teacherPage(back) };
+  const act = { daily: () => dailyMenu(back), free: () => freeChat(back), news: () => newsChat(back), ask: () => askTeacher(back), diary: () => diary(back), works: () => works(back), teacher: () => teacherPage(back), grammar: () => knowledgePage('en', null, back) };
   $$('.mode').forEach(b => b.onclick = () => {
     const id = b.dataset.m;
     if (id.startsWith('bk:')) bankQuiz(myBanks.find(x => 'bk:' + x.id === id), back);
@@ -2287,7 +2288,7 @@ function bankQuiz(b, back) {
       const nc = chars.length ? Math.min(chars.length, b.mcq.length ? 4 : 10) : 0;
       const nm = Math.min(10 - nc, b.mcq.length);
       return shuffle([
-        ...lruSample(b.mcq, nm, 'bank' + b.id).map(([q, ans, w1, w2, w3, ex]) => mkMcq(q, ans, [w1, w2, w3], ex)),
+        ...lruSample(b.mcq, nm, 'bank' + b.id).map(([q, ans, w1, w2, w3, ex]) => ({ ...mkMcq(q, ans, [w1, w2, w3], ex), pad: b.subject === 'math' })),
         ...lruSample(chars, nc, 'bankc' + b.id).map(item => ({ type: 'hanzi', item })),
       ]);
     };
@@ -2436,8 +2437,52 @@ Q.mcq = {
     const it = q.item;
     el.innerHTML = `<div class="mcq-q">${esc(it.q).replace(/\n/g, '<br>')}</div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
     bindOpts(el, it.a, done, { head: '正確答案：', en: it.opts[it.a], zh: it.ex ? '解析：' + it.ex : '', say: false });
+    if (q.pad) scratchPad(el);   // 數學：底下有計算紙
   },
 };
+/** 計算紙：用手指、觸控筆或滑鼠在上面算 */
+function scratchPad(host) {
+  const w = document.createElement('div');
+  w.className = 'pad';
+  w.innerHTML = `<div class="pad-bar"><b>計算紙</b>
+    <button class="mini pen on" data-c="#212529">黑筆</button><button class="mini pen" data-c="#e03131">紅筆</button><button class="mini pen" data-c="#1971c2">藍筆</button>
+    <button class="mini pen" data-er>橡皮擦</button><button class="mini" data-undo>上一步</button><button class="mini" data-clr>全部擦掉</button></div>
+    <canvas></canvas>`;
+  host.appendChild(w);
+  const cv = $('canvas', w), ctx = cv.getContext('2d');
+  const strokes = [];
+  let cur = null, color = '#212529', eraser = false;
+  const drawStroke = s => {
+    ctx.save();
+    ctx.globalCompositeOperation = s.er ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = s.c; ctx.lineWidth = s.er ? 24 : 3; ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.beginPath();
+    s.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    if (s.pts.length === 1) ctx.lineTo(s.pts[0][0] + 0.1, s.pts[0][1]);
+    ctx.stroke(); ctx.restore();
+  };
+  const redraw = () => { ctx.clearRect(0, 0, cv.width, cv.height); strokes.forEach(drawStroke); };
+  const fit = () => {
+    const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    if (!r.width) return;
+    cv.width = r.width * dpr; cv.height = r.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  };
+  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); cur = { c: color, er: eraser, pts: [pos(e)] }; strokes.push(cur); drawStroke(cur); };
+  cv.onpointermove = e => { if (!cur) return; cur.pts.push(pos(e)); redraw(); };
+  cv.onpointerup = cv.onpointercancel = () => { cur = null; };
+  $$('.pen', w).forEach(b => b.onclick = () => {
+    $$('.pen', w).forEach(x => x.classList.remove('on')); b.classList.add('on');
+    eraser = b.hasAttribute('data-er'); if (!eraser) color = b.dataset.c;
+  });
+  $('[data-undo]', w).onclick = () => { strokes.pop(); redraw(); };
+  $('[data-clr]', w).onclick = () => { strokes.length = 0; redraw(); };
+  setTimeout(fit, 0);
+  window.addEventListener('resize', fit);
+  onLeave(() => window.removeEventListener('resize', fit));
+}
 const mkMcq = (q, ans, wrong, ex) => { const opts = shuffle([ans, ...wrong.filter(Boolean)]); return { type: 'mcq', item: { q, opts, a: opts.indexOf(ans), ex } }; };
 function subjectQuestions(subj, lvl, n = 10) {
   if (subj === 'math') {
@@ -2447,7 +2492,7 @@ function subjectQuestions(subj, lvl, n = 10) {
       if (!g || seen.has(g.q)) continue;
       seen.add(g.q);
       const m = x => String(x).replace(/-(?=\d)/g, '−');   // 負號用數學的「−」
-      out.push(mkMcq(g.q, m(g.ans), g.wrong.map(m), g.ex));
+      out.push({ ...mkMcq(g.q, m(g.ans), g.wrong.map(m), g.ex), pad: true });
     }
     return out;
   }
@@ -2473,6 +2518,7 @@ function subjectHome(id) {
   const myBanks = me && me.school ? banksFor(me.school).filter(b => b.subject === id) : [];
   view(`${bar(S.name)}
     <div class="grade-head" style="--c:${S.color}"><div><h2>${S.name}</h2><p>${S.desc}${id === 'math' ? '・每次都是新題目' : '・每次 10 題，做過的題目會最後才再出現'}</p></div></div>
+    <button class="k-banner" data-know style="--c:${S.color}"><span><b>${S.name}重點整理（知識庫）</b><small>先讀懂重點，再來做題目：${(SUBJECT_LEVELS.map(l => (KNOWLEDGE[id] || {})[l.id] || []).flat()).length} 個主題，可以搜尋${id === 'sci' ? '、有圖解' : ''}</small></span><span class="go">讀重點 →</span></button>
     <h3 class="sec">選擇程度，直接開始</h3>
     <div class="grades">${SUBJECT_LEVELS.map(l => { const b = bestOf(`${id}-${l.id}`); return `<button class="grade" style="--c:${S.color}" data-l="${l.id}"><span class="gi sm">${l.badge}</span><b>${l.name}</b><small>${l.sub}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${l.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
     ${id === 'zh' ? `<h3 class="sec">寫生字（看筆順・描紅・默寫）</h3>
@@ -2482,15 +2528,16 @@ function subjectHome(id) {
         : `<p class="note-s school-empty">你的學校還沒有${S.name}專屬題目，請老師到「老師出題」建立。</p>`}` : ''}
     <div class="modes">${modeCard('teacher', '', '老師出題', `建立學校專屬的${S.name}題庫`)}</div>`, subjectMenu);
   $$('.grade').forEach(b => b.onclick = () => (b.dataset.w ? hanziQuiz(b.dataset.w, () => subjectHome(id)) : subjectQuiz(id, b.dataset.l)));
+  $('[data-know]').onclick = () => knowledgePage(id, null, () => subjectHome(id));
   $$('.mode').forEach(b => b.onclick = () => {
     const m = b.dataset.m;
     if (m === 'teacher') teacherPage(() => subjectHome(id), 'new', false, id);
     else bankQuiz(myBanks.find(x => 'bk:' + x.id === m), () => subjectHome(id));
   });
 }
-function subjectQuiz(id, lvl) {
+function subjectQuiz(id, lvl, backTo) {
   const S = SUBJECTS.find(s => s.id === id), L = SUBJECT_LEVELS.find(l => l.id === lvl);
-  const o = { title: `${S.name}・${L.name}`, key: `${id}-${lvl}`, againText: '再來 10 題', menuText: `回${S.name}`, back: () => subjectHome(id) };
+  const o = { title: `${S.name}・${L.name}`, key: `${id}-${lvl}`, againText: '再來 10 題', menuText: `回${S.name}`, back: backTo || (() => subjectHome(id)) };
   o.rebuild = () => subjectQuestions(id, lvl);
   runQuiz({ ...o, questions: o.rebuild() });
 }
@@ -2587,6 +2634,45 @@ function hanziQuiz(level, back, list, title, key) {
   const o = { title: title || `寫生字・${L ? L.name : ''}`, key: key || `zhw-${level}`, againText: '再寫 10 個字', menuText: '回國語', back };
   o.rebuild = () => lruSample(src, Math.min(10, src.length), key || `zhw-${level}`).map(item => ({ type: 'hanzi', item }));
   runQuiz({ ...o, questions: o.rebuild() });
+}
+
+/* =========================================================
+   知識庫：各科重點整理（可搜尋、看圖、直接做練習）
+   ========================================================= */
+const kText = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+function knowledgePage(subj, lvl, back, q = '') {
+  const S = SUBJECTS.find(s => s.id === subj);
+  const me = currentProfile();
+  const myStage = (me && me.stage) || store.get('level', 'elem');
+  const levels = SUBJECT_LEVELS.filter(l => (KNOWLEDGE[subj] || {})[l.id]);
+  lvl = lvl || (levels.find(l => l.stage === myStage) || levels[0]).id;
+  const all = levels.flatMap(l => KNOWLEDGE[subj][l.id].map((t, i) => ({ ...t, lv: l.id, i })));
+  const kw = q.trim().toLowerCase();
+  const list = kw ? all.filter(t => (t.t + ' ' + t.p.join(' ') + ' ' + (t.ex || []).join(' ') + ' ' + (t.tip || '')).toLowerCase().includes(kw)) : all.filter(t => t.lv === lvl);
+  const figs = typeof KFIGS !== 'undefined' ? KFIGS : {};
+  view(`${bar(`${S.name}・重點整理`)}
+    <div class="card k-top">
+      <input class="type-in k-search" placeholder="搜尋重點，例如：${subj === 'math' ? '面積' : subj === 'sci' ? '光合作用' : subj === 'soc' ? '颱風' : subj === 'en' ? '過去式' : '成語'}" value="${esc(q)}">
+      ${kw ? `<p class="note-s">找到 ${list.length} 個相關重點</p>` : `<div class="k-levels">${levels.map(l => `<button class="lv-chip ${l.id === lvl ? 'on' : ''}" data-kl="${l.id}">${l.name}</button>`).join('')}</div>`}
+    </div>
+    ${list.map(t => `<details class="card k-topic" ${list.length <= 3 || kw ? 'open' : ''}>
+      <summary><span class="k-badge">${SUBJECT_LEVELS.find(l => l.id === t.lv).badge}</span> ${esc(t.t)}</summary>
+      ${[].concat(t.fig || []).filter(f => figs[f]).map(f => `<figure class="k-fig">${figs[f].svg}<figcaption>${esc(figs[f].cap)}</figcaption></figure>`).join('')}
+      <ul class="k-points">${t.p.map(x => `<li>${kText(x)}</li>`).join('')}</ul>
+      ${t.ex ? `<div class="k-ex"><b>${subj === 'math' ? '例題' : '例子'}</b>${t.ex.map(x => `<div>${subj === 'en' ? sayMini(x) + ' ' : ''}${esc(x)}</div>`).join('')}</div>` : ''}
+      ${t.tip ? `<div class="k-tip">記憶小撇步：${kText(t.tip)}</div>` : ''}
+      <div class="row"><button class="btn primary" data-kq="${t.lv}">做${SUBJECT_LEVELS.find(l => l.id === t.lv).name}練習題</button><button class="btn ghost" data-ka="${esc(t.t)}">看不懂？問 AI 老師</button></div>
+    </details>`).join('') || '<div class="card center"><p>沒有找到相關的重點，換個關鍵字試試看。</p></div>'}`, back);
+  const inp = $('.k-search');
+  let timer = null;
+  inp.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = inp.value; knowledgePage(subj, lvl, back, v); const n = $('.k-search'); n.focus(); n.setSelectionRange(v.length, v.length); }, 350); };
+  $$('[data-kl]').forEach(b => b.onclick = () => knowledgePage(subj, b.dataset.kl, back));
+  $$('[data-kq]').forEach(b => b.onclick = () => {
+    const lv = b.dataset.kq, here = () => knowledgePage(subj, lv, back);
+    if (subj === 'en') { const g = { e1: '1', e2: '3', e3: '5', jh: '8', sh: '11' }[lv]; return gradeView(g); }
+    subjectQuiz(subj, lv, here);
+  });
+  $$('[data-ka]').forEach(b => b.onclick = () => { askTeacher(() => knowledgePage(subj, lvl, back)); setTimeout(() => { const ta = $('textarea.write'); if (ta) ta.value = `請用簡單的方式解釋「${b.dataset.ka}」（${S.name}），並舉例說明。`; }, 50); });
 }
 
 /* ---------- 開始 ---------- */
