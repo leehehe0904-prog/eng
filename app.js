@@ -257,13 +257,15 @@ function bindOpts(el, correct, done, rev, onPick) {
 function typeAnswer(el, check, done, rev, o = {}) {
   const box = document.createElement('div');
   box.className = 'type-box';
-  box.innerHTML = `<input class="type-in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${o.ph || '在這裡輸入英文'}"><button class="btn primary">✔ 檢查</button>`;
+  box.innerHTML = `${o.mic && SR ? '<button class="mic" type="button" title="用說的">🎤</button>' : ''}<input class="type-in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${o.ph || '在這裡輸入英文'}"><button class="btn primary" data-go>✔ 檢查</button>`;
   el.appendChild(box);
-  const inp = $('input', box), b = $('button', box);
+  const inp = $('input', box), b = $('[data-go]', box), mic = $('.mic', box);
+  if (mic) mic.onclick = () => { if (!inp.disabled) recognize(mic, t => { inp.value = t; go(); }, { recText: '⏹' }); };
   setTimeout(() => inp.focus({ preventScroll: true }), 50);
   const go = () => {
     if (!inp.value.trim()) { inp.focus(); return; }
     inp.disabled = b.disabled = true;
+    if (mic) mic.disabled = true;
     const ok = check(inp.value);
     inp.classList.add(ok ? 'right' : 'wrong');
     o.after && o.after(inp.value, ok);
@@ -403,7 +405,7 @@ const Q = {
       } else {
         pool = [...new Set(c.sentences.flatMap(z => tokens(z.en)))].filter(t => t.length >= 2 && t.toLowerCase() !== ans.toLowerCase());
       }
-      pool = [...new Set(pool)].filter(p => p.toLowerCase() !== ans.toLowerCase());
+      pool = [...new Map(pool.map(p => [p.toLowerCase(), p])).values()].filter(p => p.toLowerCase() !== ans.toLowerCase());
       if (pool.length < 3) return null;
       const display = raw.map((w, i) => (i === x.i ? esc(w).replace(esc(ans), '<span class="blank">_____</span>') : esc(w))).join(' ');
       return { key: s.en, s, ans, display, opts: shuffle([ans, ...sample(pool, 3)]) };
@@ -459,6 +461,123 @@ const Q = {
     },
   },
 };
+
+/* ---------- 遊戲型題目（直接出現在答題中） ---------- */
+Object.assign(Q, {
+  match: {
+    label: '配對遊戲', max: 1,
+    make(c) {
+      if (c.words.length < 4) return null;
+      const set = sample(c.words, 4);
+      return { key: 'match:' + set.map(w => w.en).join(), set, L: shuffle(set), R: shuffle(set) };
+    },
+    render(el, q, done) {
+      el.innerHTML = `<p class="ask">🔗 把英文和圖片配成一對（先點左邊，再點右邊）</p>
+        <div class="match">
+          <div class="col">${q.L.map((w, i) => `<button class="m-card m-l" data-i="${i}">${esc(w.en)}</button>`).join('')}</div>
+          <div class="col">${q.R.map((w, i) => `<button class="m-card m-r" data-i="${i}"><span class="emo">${w.emoji}</span> ${esc(w.zh)}</button>`).join('')}</div>
+        </div>`;
+      let sl = null, sr = null, matched = 0, miss = 0;
+      const tryMatch = () => {
+        if (sl == null || sr == null) return;
+        const bl = $(`.m-l[data-i="${sl}"]`, el), br = $(`.m-r[data-i="${sr}"]`, el);
+        if (q.L[sl] === q.R[sr]) {
+          [bl, br].forEach(b => { b.classList.remove('sel'); b.classList.add('done'); b.disabled = true; });
+          matched++;
+          if (matched === q.set.length) {
+            done(miss <= 1, { head: `⚠️ 配錯了 ${miss} 次，再熟悉一下：`, en: q.set.map(w => `${w.en} = ${w.zh}`).join('、'), say: false });
+          } else sfx(true);
+        } else {
+          miss++; sfx(false);
+          [bl, br].forEach(b => { b.classList.remove('sel'); b.classList.add('shake'); setTimeout(() => b.classList.remove('shake'), 450); });
+        }
+        sl = sr = null;
+      };
+      $$('.m-l', el).forEach(b => b.onclick = () => { $$('.m-l', el).forEach(x => x.classList.remove('sel')); b.classList.add('sel'); sl = +b.dataset.i; speak(q.L[sl].en); tryMatch(); });
+      $$('.m-r', el).forEach(b => b.onclick = () => { $$('.m-r', el).forEach(x => x.classList.remove('sel')); b.classList.add('sel'); sr = +b.dataset.i; tryMatch(); });
+    },
+  },
+  chatReply: {
+    label: 'AI 對話', max: 2,
+    make(c) {
+      const turns = (c.dialogues || []).flatMap(d => d.turns);
+      if (!turns.length) return null;
+      const t = pick(turns);
+      return { key: 'chat:' + t.ai, t };
+    },
+    render(el, q, done) {
+      const t = q.t, ai = t.ai.replace(/\{name\}/g, 'friend');
+      el.innerHTML = `<p class="ask">🤖 Robo 在問你問題，用英文回答它！</p>
+        <div class="msg ai solo"><span class="av">🤖</span><div class="bub"><div>${esc(ai)}</div><div class="zh" hidden>${esc(t.zh)}</div>
+          <div class="tools"><button class="mini" data-say="${esc(ai)}">🔊</button><button class="mini" data-zh>中文</button><button class="mini" data-tip>💡 提示</button></div></div></div>
+        <div class="chips solo" hidden><span>💡 可以這樣說：</span>${t.ex.map(x => `<button type="button" class="chip">${esc(x)}</button>`).join('')}</div>`;
+      setTimeout(() => speak(ai), 350);
+      $('[data-zh]', el).onclick = () => { const z = $('.bub .zh', el); z.hidden = !z.hidden; };
+      $('[data-tip]', el).onclick = () => { $('.chips', el).hidden = false; };
+      typeAnswer(el, v => accepts(t.keys, v), done, { head: '💡 可以這樣回答：', en: t.ex[0], zh: t.zh }, { ph: '用英文回答…', mic: true });
+      $$('.chip', el).forEach(c => c.onclick = () => { const inp = $('.type-in', el); if (!inp.disabled) { inp.value = c.textContent; inp.focus(); } });
+    },
+  },
+  makeSentence: {
+    label: '自己造句', max: 1,
+    make(c) {
+      const ws = c.words.filter(w => /^[A-Za-z]+$/.test(w.en));
+      if (!ws.length) return null;
+      const w = pick(ws);
+      const ex = c.sentences.find(s => new RegExp(`\\b${w.en}`, 'i').test(s.en));
+      return { key: 'make:' + w.en, w, ex };
+    },
+    render(el, q, done) {
+      const w = q.w;
+      el.innerHTML = `<p class="ask">💭 用「${esc(w.en)}」自己寫一個英文句子！</p>
+        <div class="word-card inline"><span class="emo">${w.emoji}</span><div><b>${esc(w.en)}</b><small>${esc(w.zh)}</small></div><button class="mini" data-say="${esc(w.en)}">🔊</button></div>
+        <div class="starters">${STARTERS.slice(0, 6).map(s => `<button class="chip" data-st="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
+      const rev = q.ex ? { head: '💡 參考句子：', en: q.ex.en, zh: q.ex.zh } : { head: '💡 照上面的提示改一改就更好了', en: '', say: false };
+      typeAnswer(el, v => checkWriting(v, [w.en]).every(c => c.ok), done, rev, {
+        ph: '寫一個完整的句子…',
+        after(v, ok) {
+          const d = document.createElement('div');
+          d.innerHTML = checkListHtml(checkWriting(v, [w.en]));
+          el.appendChild(d);
+          if (ok) { rev.en = v.trim(); rev.zh = ''; rev.say = true; }
+        },
+      });
+      $$('[data-st]', el).forEach(b => b.onclick = () => {
+        const inp = $('.type-in', el); if (inp.disabled) return;
+        inp.value = b.dataset.st; inp.focus();
+        const p = inp.value.indexOf('___'); if (p >= 0) inp.setSelectionRange(p, p + 3);
+      });
+    },
+  },
+  speakSay: {
+    label: '跟著說', max: 2,
+    make(c) {
+      if (!SR) return null;
+      const ss = c.sentences.filter(s => tokens(s.en).length <= 8);
+      if (!ss.length) return null;
+      const s = pick(ss);
+      return { key: 'say:' + s.en, s };
+    },
+    render(el, q, done) {
+      const rev = { en: q.s.en, zh: q.s.zh };
+      el.innerHTML = `<p class="ask">🗣️ 聽一聽，按 🎤 跟著說一次</p>${sayBtns(q.s.en)}
+        <div class="sentence">${esc(q.s.en)}</div><div class="zh-big sm">${esc(q.s.zh)}</div>
+        <div class="row center"><button class="btn primary big" data-mic>🎤 開始說</button><button class="btn ghost" data-skip>略過這題</button></div>
+        <div class="said"></div>`;
+      setTimeout(() => speak(q.s.en), 350);
+      let tries = 0, over = false;
+      const finish = ok => { over = true; $('[data-mic]', el).disabled = $('[data-skip]', el).disabled = true; done(ok, rev); };
+      $('[data-mic]', el).onclick = e => { if (!over) recognize(e.currentTarget, t => {
+        const p = Math.round(similarity(q.s.en, t) * 100);
+        $('.said', el).innerHTML = `你說：「${esc(t)}」 <b class="${p >= 70 ? 'g' : 'r'}">${p} 分</b>`;
+        if (p >= 70) finish(true);
+        else if (++tries >= 2) finish(false);
+        else { sfx(false); $('.said', el).innerHTML += '　再試一次！'; }
+      }, { recText: '⏹ 聽你說…' }); };
+      $('[data-skip]', el).onclick = () => finish(false);
+    },
+  },
+});
 
 /* ---------- 英檢題型 ---------- */
 const scriptOf = it => it.lines ? it.lines.map(([w, t]) => `${w === 'M' ? '男' : '女'}：${t}`).join('\n') : '';
@@ -558,17 +677,20 @@ Object.assign(Q, {
    測驗引擎
    ========================================================= */
 function buildQs(o) {
-  const ctx = { words: o.words || [], sentences: o.sentences || [] };
-  const qs = [], used = new Set();
-  let guard = 0;
-  while (qs.length < o.n && guard++ < 300) {
+  const ctx = { words: o.words || [], sentences: o.sentences || [], dialogues: o.dialogues || [] };
+  const qs = [], used = new Set(), count = {};
+  let guard = 0, last = null;
+  while (qs.length < o.n && guard++ < 400) {
     const type = pick(o.types);
+    if (o.types.length > 1 && type === last && guard < 300) continue;      // 不連續出同一種題型
+    if (Q[type].max && (count[type] || 0) >= Q[type].max && guard < 300) continue;
     const q = Q[type].make(ctx);
     if (!q) continue;
-    const sig = type + ':' + q.key;
-    if (used.has(sig) && guard < 200) continue;
-    used.add(sig);
-    q.type = type;
+    const key = String(q.key).replace(/^\w+:/, '');
+    if (used.has(key) && guard < 250) continue;                            // 同一個字／句子不重複出現
+    used.add(key);
+    q.type = type; last = type;
+    count[type] = (count[type] || 0) + 1;
     qs.push(q);
   }
   return qs;
@@ -598,12 +720,12 @@ function runQuiz(o) {
       $('.sc').textContent = '⭐ ' + score;
       const foot = $('.qfoot');
       foot.innerHTML = `<div class="feedback ${ok ? 'ok' : 'bad'}">
-          <div>${ok ? '✅ ' + pick(PRAISE) : '❌ 正確答案：'} <b>${esc(rev.en)}</b>${rev.say === false ? '' : ` <button class="mini" data-say="${esc(rev.en)}">🔊</button>`}</div>
+          <div>${ok ? '✅ ' + pick(PRAISE) : rev.head || '❌ 正確答案：'} <b>${esc(rev.en)}</b>${rev.say === false || !rev.en ? '' : ` <button class="mini" data-say="${esc(rev.en)}">🔊</button>`}</div>
           ${rev.zh ? `<div class="zh">${esc(rev.zh)}</div>` : ''}
           ${rev.note ? `<details class="note"><summary>看內容／解析</summary>${esc(rev.note)}</details>` : ''}
         </div>
         <button class="btn primary big" data-next>${i + 1 < qs.length ? '下一題 ➡' : '看成績 🏆'}</button>`;
-      if (rev.say !== false) setTimeout(() => speak(rev.en), 500);
+      if (rev.say !== false && rev.en) setTimeout(() => speak(rev.en), 500);
       const nb = $('[data-next]', foot);
       nb.onclick = () => { i++; next(); };
       setTimeout(() => { nb.focus({ preventScroll: true }); foot.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
@@ -630,11 +752,12 @@ function runQuiz(o) {
         <h2>${msg}</h2>
         <p class="score">答對 <b>${score}</b> / ${qs.length} 題（${pct} 分）</p>
         ${mock}
-        ${wrong.length ? `<h4>📝 再複習一下：</h4><ul class="review">${wrong.map(w => `<li>${w.say === false ? '' : `<button class="mini" data-say="${esc(w.en)}">🔊</button>`} <b>${esc(w.en)}</b> <span>${esc(w.zh || '')}</span></li>`).join('')}</ul>` : ''}
-        <div class="row center"><button class="btn primary" data-again>🔁 再玩一次</button><button class="btn" data-menu>⬅ 回選單</button></div>
+        ${wrong.filter(w => w.en).length ? `<h4>📝 再複習一下：</h4><ul class="review">${wrong.filter(w => w.en).map(w => `<li>${w.say === false ? '' : `<button class="mini" data-say="${esc(w.en)}">🔊</button>`} <b>${esc(w.en)}</b> <span>${esc(w.zh || '')}</span></li>`).join('')}</ul>` : ''}
+        <div class="row center"><button class="btn primary" data-again>${o.againText || '🔁 再玩一次'}</button>${o.wordsOf ? '<button class="btn" data-words>📖 單字表</button>' : ''}<button class="btn" data-menu>${o.menuText || '⬅ 回選單'}</button></div>
       </div>`, o.back);
     $('[data-again]').onclick = () => runQuiz(o.rebuild ? { ...o, questions: o.rebuild() } : o);
     $('[data-menu]').onclick = o.back;
+    if (o.wordsOf) $('[data-words]').onclick = () => wordList(o.wordsOf, () => runQuiz(o.rebuild ? { ...o, questions: o.rebuild() } : o));
     if (st === 3) { confetti(); sfx(true); }
   }
 }
@@ -642,31 +765,21 @@ function runQuiz(o) {
 /* =========================================================
    首頁與年級
    ========================================================= */
-const MODES = [
-  { id: 'cards', icon: '📇', name: '單字卡', desc: '看圖、聽發音、翻卡片', run: g => flashcards(g) },
-  { id: 'listen', icon: '🎧', name: '聽力挑戰', desc: '聽聲音選答案、聽寫', types: ['listen', 'listenSentenceZh', 'listenSpell', 'listenBlocks'] },
-  { id: 'fill', icon: '✏️', name: '填空題', desc: '缺字母、句子填空', types: ['fillSentence', 'missingLetter', 'pic2word'] },
-  { id: 'blocks', icon: '🧱', name: '積木拼拼樂', desc: '用積木拼單字、拼句子', types: ['sentenceBlocks', 'spellBlocks', 'listenBlocks'] },
-  { id: 'match', icon: '🔗', name: '配對遊戲', desc: '英文和圖配成一對', run: g => matchGame(g) },
-  { id: 'mole', icon: '🔨', name: '打地鼠', desc: '快！打中正確的單字', run: g => whack(g) },
-  { id: 'mix', icon: '🎲', name: '綜合挑戰', desc: '各種題型隨機出現', types: ['listen', 'pic2word', 'listenSpell', 'typeWord', 'missingLetter', 'spellBlocks', 'fillSentence', 'sentenceBlocks', 'listenBlocks', 'listenSentenceZh', 'writeSentence'] },
-  { id: 'chat', icon: '🤖', name: 'AI 對話', desc: '跟機器人用英文聊天', run: g => chatMenu(g) },
-  { id: 'write', icon: '✍️', name: '寫作練習', desc: '寫單字、寫句子、寫日記', run: g => writeMenu(g) },
-  { id: 'daily', icon: '🏠', name: '生活英文', desc: '每天都用得到的句子', run: g => dailyMenu(() => gradeView(g)) },
-];
+// 年級練習：所有題型直接混在答題裡
+const GRADE_TYPES = ['listen', 'pic2word', 'listenSpell', 'typeWord', 'missingLetter', 'spellBlocks', 'fillSentence',
+  'sentenceBlocks', 'listenBlocks', 'listenSentenceZh', 'writeSentence', 'match', 'chatReply', 'makeSentence', 'speakSay'];
+const DAILY_FOR = g => (+g <= 2 ? ['polite', 'morning'] : +g <= 4 ? ['polite', 'morning', 'school', 'meal', 'night', 'friends'] : DAILY.map(c => c.id));
 
 function home() {
   const best = store.get('best', {});
-  const gStars = g => MODES.filter(m => m.types).reduce((s, m) => s + starsOf(best[`${g}-${m.id}`] || 0), 0);
-  const maxStars = MODES.filter(m => m.types).length * 3;
   view(`
     <section class="hero">
-      <div><h1>英文小冒險 <span>English Adventure</span></h1><p>選一個年級，開始今天的英文挑戰吧！一路練到英檢初級 🚀</p></div>
+      <div><h1>英文小冒險 <span>English Adventure</span></h1><p>點一個年級就開始答題！一路練到英檢初級 🚀</p></div>
       <div class="hero-emo">🦉</div>
     </section>
     <button class="gept-banner" data-gept><span class="gb-icon">🎓</span><span><b>全民英檢初級特訓</b><small>聽力・閱讀・寫作・口說 ＋ 模擬考</small></span><span class="go">GO ➡</span></button>
-    <h3 class="sec">📚 選擇年級</h3>
-    <div class="grades">${GRADE_KEYS.map(g => { const G = GRADES[g]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi">${G.icon}</span><b>${G.name}</b><small>${G.theme}</small><span class="gs">⭐ ${gStars(g)} / ${maxStars}</span></button>`; }).join('')}</div>
+    <h3 class="sec">📚 選擇年級，直接開始</h3>
+    <div class="grades">${GRADE_KEYS.map(g => { const G = GRADES[g], b = best[`${g}-all`]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi">${G.icon}</span><b>${G.name}</b><small>${G.theme}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${b == null ? '▶ 開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
     <h3 class="sec">🌟 更多練習</h3>
     <div class="modes">
       ${modeCard('daily', '🏠', '生活英文', '每天都用得到的句子')}
@@ -684,206 +797,36 @@ function home() {
 
 function gradeView(g) {
   const G = GRADES[g];
-  const back = g === 'gept' ? geptHome : home;
-  const best = store.get('best', {});
-  const extra = m => {
-    if (m.types) return starsHtml(starsOf(best[`${g}-${m.id}`] || 0));
-    if (m.id === 'match') { const t = store.get('matchBest', {})[g]; return t ? `<span class="badge">最快 ${t} 秒</span>` : ''; }
-    if (m.id === 'mole') { const t = store.get('moleBest', {})[g]; return t ? `<span class="badge">最高 ${t} 分</span>` : ''; }
-    return '';
+  const daily = DAILY.filter(c => DAILY_FOR(g).includes(c.id)).flatMap(c => c.items.map(([en, zh]) => ({ en, zh })));
+  const o = {
+    title: `${G.icon} ${G.name}`,
+    types: GRADE_TYPES,
+    words: G.W,
+    sentences: G.S.concat(sample(daily, 8)),
+    dialogues: G.dialogues,
+    n: 10,
+    key: `${g}-all`,
+    wordsOf: g,
+    againText: '🔁 再來 10 題',
+    menuText: g === 'gept' ? '⬅ 回英檢' : '🏠 回首頁',
+    back: g === 'gept' ? geptHome : home,
   };
-  view(`${bar(`${G.icon} ${G.name}`)}
-    <div class="grade-head" style="--c:${G.color}">
-      <div><h2>${G.icon} ${G.name}</h2><p>${G.theme}<br>${G.W.length} 個單字・${G.S.length} 個句子・${G.dialogues.length} 段對話</p></div>
-      <button class="btn" data-words>📖 單字表</button>
-    </div>
-    ${+g >= 4 ? `<button class="gept-banner small" data-gept><span class="gb-icon">🎓</span><span><b>準備好挑戰英檢初級了嗎？</b><small>四年級以上可以開始練習英檢題型</small></span><span class="go">➡</span></button>` : ''}
-    <div class="modes">${MODES.map(m => modeCard(m.id, m.icon, m.name, m.desc, extra(m))).join('')}</div>`, back);
-  $('[data-words]').onclick = () => wordList(g);
-  const gb = $('[data-gept]'); if (gb) gb.onclick = geptHome;
-  $$('.mode').forEach(b => b.onclick = () => {
-    const m = MODES.find(x => x.id === b.dataset.m);
-    if (m.types) runQuiz({ title: `${G.name}・${m.name}`, types: m.types, words: G.W, sentences: G.S, n: 10, key: `${g}-${m.id}`, back: () => gradeView(g) });
-    else m.run(g);
-  });
+  o.rebuild = () => buildQs(o);
+  runQuiz({ ...o, questions: o.rebuild() });
 }
 
-function wordList(g) {
+function wordList(g, back) {
   const G = GRADES[g];
   view(`${bar(`${G.name}・單字表`)}
     <div class="card"><table class="wtable"><tbody>${G.W.map(w => `<tr><td class="e">${w.emoji}</td><td><b>${esc(w.en)}</b></td><td>${esc(w.zh)}</td><td><button class="mini" data-say="${esc(w.en)}">🔊</button></td></tr>`).join('')}</tbody></table></div>
-    <div class="card"><h3>📝 句子</h3><table class="wtable"><tbody>${G.S.map(s => `<tr><td><b>${esc(s.en)}</b><br><small>${esc(s.zh)}</small></td><td><button class="mini" data-say="${esc(s.en)}">🔊</button></td></tr>`).join('')}</tbody></table></div>`, () => gradeView(g));
-}
-
-/* ---------- 單字卡 ---------- */
-function flashcards(g) {
-  const G = GRADES[g];
-  let list = G.W.slice(), i = 0;
-  draw();
-  function draw() {
-    const w = list[i];
-    view(`${bar(`${G.name}・單字卡`)}
-      <div class="fc-wrap">
-        <div class="flip" tabindex="0"><div class="flip-inner">
-          <div class="face"><div class="fc-emo">${w.emoji}</div><div class="fc-en">${esc(w.en)}</div><small>👆 點卡片看中文</small></div>
-          <div class="face face-b"><div class="fc-emo">${w.emoji}</div><div class="fc-zh">${esc(w.zh)}</div><div class="fc-en sm">${esc(w.en)}</div></div>
-        </div></div>
-        <div class="fc-count">${i + 1} / ${list.length}</div>
-        <div class="row center">
-          <button class="btn" data-prev>◀ 上一張</button>
-          <button class="btn" data-say="${esc(w.en)}">🔊</button>
-          <button class="btn" data-say="${esc(w.en)}" data-slow="1">🐢</button>
-          <button class="btn" data-mic>🎤 跟我唸</button>
-          <button class="btn primary" data-nextc>下一張 ▶</button>
-        </div>
-        <div class="said"></div>
-        <div class="row center"><button class="btn ghost" data-shuffle>🔀 打亂順序</button></div>
-      </div>`, () => gradeView(g));
-    const f = $('.flip');
-    f.onclick = () => f.classList.toggle('on');
-    $('[data-prev]').onclick = () => { i = (i - 1 + list.length) % list.length; draw(); };
-    $('[data-nextc]').onclick = () => { i = (i + 1) % list.length; draw(); };
-    $('[data-shuffle]').onclick = () => { list = shuffle(list); i = 0; draw(); toast('已打亂順序'); };
-    $('[data-mic]').onclick = e => recognize(e.currentTarget, t => {
-      const ok = norm(t).split(' ').includes(norm(w.en)) || similarity(w.en, t) >= 0.99;
-      $('.said').innerHTML = `你說：「${esc(t)}」 ${ok ? '✅ 很標準！' : '🤔 再試一次，先按 🔊 聽聽看'}`;
-      sfx(ok);
-    }, { recText: '⏹ 聽你說…' });
-    const key = e => {
-      if (e.key === 'ArrowRight') $('[data-nextc]').click();
-      else if (e.key === 'ArrowLeft') $('[data-prev]').click();
-      else if (e.key === ' ') { e.preventDefault(); f.classList.toggle('on'); }
-    };
-    document.addEventListener('keydown', key);
-    onLeave(() => document.removeEventListener('keydown', key));
-    setTimeout(() => speak(w.en), 250);
-  }
-}
-
-/* ---------- 配對遊戲 ---------- */
-function matchGame(g) {
-  const G = GRADES[g];
-  const set = sample(G.W, 6), L = shuffle(set), R = shuffle(set);
-  let sl = null, sr = null, matched = 0;
-  const t0 = Date.now();
-  view(`${bar(`${G.name}・配對遊戲`, '<span class="timer">⏱ 0 秒</span>')}
-    <p class="ask center">把英文單字和圖片配成一對！先點左邊，再點右邊</p>
-    <div class="match">
-      <div class="col">${L.map((w, i) => `<button class="m-card m-l" data-i="${i}">${esc(w.en)}</button>`).join('')}</div>
-      <div class="col">${R.map((w, i) => `<button class="m-card m-r" data-i="${i}"><span class="emo">${w.emoji}</span> ${esc(w.zh)}</button>`).join('')}</div>
-    </div><div class="match-end"></div>`, () => gradeView(g));
-  const timer = setInterval(() => { $('.timer').textContent = '⏱ ' + Math.floor((Date.now() - t0) / 1000) + ' 秒'; }, 500);
-  onLeave(() => clearInterval(timer));
-  const tryMatch = () => {
-    if (sl == null || sr == null) return;
-    const bl = $(`.m-l[data-i="${sl}"]`), br = $(`.m-r[data-i="${sr}"]`);
-    if (L[sl] === R[sr]) {
-      [bl, br].forEach(b => { b.classList.remove('sel'); b.classList.add('done'); b.disabled = true; });
-      sfx(true); matched++;
-      if (matched === set.length) {
-        clearInterval(timer);
-        const secs = Math.floor((Date.now() - t0) / 1000);
-        const bests = store.get('matchBest', {});
-        const nb = !bests[g] || secs < bests[g];
-        if (nb) { bests[g] = secs; store.set('matchBest', bests); }
-        confetti();
-        $('.match-end').innerHTML = `<div class="card result"><h2>🎉 全部配對成功！</h2><p class="score">花了 <b>${secs}</b> 秒 ${nb ? '🏅 新紀錄！' : `（最快紀錄 ${bests[g]} 秒）`}</p><div class="row center"><button class="btn primary" data-again>🔁 再玩一次</button><button class="btn" data-menu>⬅ 回選單</button></div></div>`;
-        $('[data-again]').onclick = () => matchGame(g);
-        $('[data-menu]').onclick = () => gradeView(g);
-      }
-    } else {
-      sfx(false);
-      [bl, br].forEach(b => { b.classList.remove('sel'); b.classList.add('shake'); setTimeout(() => b.classList.remove('shake'), 450); });
-    }
-    sl = sr = null;
-  };
-  $$('.m-l').forEach(b => b.onclick = () => { $$('.m-l').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); sl = +b.dataset.i; speak(L[sl].en); tryMatch(); });
-  $$('.m-r').forEach(b => b.onclick = () => { $$('.m-r').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); sr = +b.dataset.i; tryMatch(); });
-}
-
-/* ---------- 打地鼠 ---------- */
-function whack(g) {
-  const G = GRADES[g], W = G.W;
-  let score = 0, time = 45, target = pick(W), running = false;
-  const timers = [];
-  view(`${bar(`${G.name}・打地鼠`, '<span class="timer">⏱ 45</span>')}
-    <div class="mole-top"><div class="target">🎯 打中：<span class="t-emo">${target.emoji}</span> <b class="t-zh">${esc(target.zh)}</b></div><div class="mole-score">分數 <b>0</b></div></div>
-    <div class="holes">${Array.from({ length: 9 }, (_, i) => `<div class="hole" data-h="${i}"><button class="mole"></button></div>`).join('')}</div>
-    <div class="mole-start"><button class="btn primary big" data-start>▶ 開始遊戲</button><p>地鼠身上有英文字，找到和目標一樣意思的就打下去！打錯會扣 1 分。</p></div>`, () => gradeView(g));
-  onLeave(() => timers.forEach(t => { clearInterval(t); clearTimeout(t); }));
-  const setTarget = () => {
-    let n; do { n = pick(W); } while (n === target && W.length > 1);
-    target = n;
-    $('.t-emo').textContent = target.emoji; $('.t-zh').textContent = target.zh;
-  };
-  const holes = $$('.hole');
-  function spawn() {
-    if (!running) return;
-    const empty = holes.filter(h => !h.classList.contains('up'));
-    if (!empty.length) return;
-    const h = pick(empty), m = $('.mole', h);
-    const showing = holes.some(x => x.classList.contains('up') && x._w === target);
-    const w = !showing && Math.random() < 0.6 ? target : pick(W.filter(x => x !== target));
-    h._w = w; m.textContent = w.en; m.disabled = false;
-    h.classList.add('up');
-    const life = Math.max(1100, 2000 - score * 40);
-    h._t = setTimeout(() => h.classList.remove('up'), life);
-    timers.push(h._t);
-  }
-  holes.forEach(h => {
-    $('.mole', h).onclick = () => {
-      if (!running || !h.classList.contains('up')) return;
-      clearTimeout(h._t);
-      const ok = h._w === target;
-      h.classList.add(ok ? 'hit' : 'miss');
-      setTimeout(() => h.classList.remove('up', 'hit', 'miss'), 250);
-      if (ok) { score++; sfx(true); speak(h._w.en); setTarget(); } else { score = Math.max(0, score - 1); sfx(false); }
-      $('.mole-score b').textContent = score;
-    };
-  });
-  $('[data-start]').onclick = () => {
-    $('.mole-start').style.display = 'none';
-    running = true;
-    timers.push(setInterval(spawn, 750));
-    timers.push(setInterval(() => {
-      time--; $('.timer').textContent = '⏱ ' + time;
-      if (time <= 0) end();
-    }, 1000));
-  };
-  function end() {
-    running = false;
-    timers.forEach(t => { clearInterval(t); clearTimeout(t); });
-    holes.forEach(h => h.classList.remove('up'));
-    const bests = store.get('moleBest', {});
-    const nb = !(bests[g] >= score);
-    if (nb) { bests[g] = score; store.set('moleBest', bests); }
-    if (score >= 10) confetti();
-    const box = $('.mole-start');
-    box.style.display = '';
-    box.innerHTML = `<div class="card result"><h2>⏰ 時間到！</h2><p class="score">你得了 <b>${score}</b> 分 ${nb && score > 0 ? '🏅 新紀錄！' : `（最高 ${bests[g]} 分）`}</p><div class="row center"><button class="btn primary" data-again>🔁 再玩一次</button><button class="btn" data-menu>⬅ 回選單</button></div></div>`;
-    $('[data-again]').onclick = () => whack(g);
-    $('[data-menu]').onclick = () => gradeView(g);
-  }
+    <div class="card"><h3>📝 句子</h3><table class="wtable"><tbody>${G.S.map(s => `<tr><td><b>${esc(s.en)}</b><br><small>${esc(s.zh)}</small></td><td><button class="mini" data-say="${esc(s.en)}">🔊</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="row center"><button class="btn primary big" data-go>▶ 開始答題</button></div>`, back);
+  $('[data-go]').onclick = back;
 }
 
 /* =========================================================
    AI 對話
    ========================================================= */
-function chatMenu(g) {
-  const G = GRADES[g];
-  view(`${bar(`${G.name}・AI 對話`)}
-    <p class="ask center">選一個主題，跟機器人 Robo 🤖 用英文聊天！<br><small>可以打字，也可以按 🎤 用說的；不會的時候點 💡 提示</small></p>
-    <div class="modes">
-      ${G.dialogues.map((d, i) => modeCard('d' + i, d.icon, d.title, `${d.turns.length} 個問題`)).join('')}
-      ${modeCard('free', '🗨️', '自由聊天', '想說什麼就說什麼')}
-    </div>`, () => gradeView(g));
-  $$('.mode').forEach(b => b.onclick = () => {
-    const id = b.dataset.m;
-    if (id === 'free') freeChat(() => chatMenu(g));
-    else dialogueChat(g, G.dialogues[+id.slice(1)]);
-  });
-}
-
 function chatUI(title, back) {
   view(`${bar(title)}
     <div class="chat card">
@@ -946,8 +889,8 @@ function extractName(text) {
   return null;
 }
 
-function dialogueChat(g, d) {
-  const ui = chatUI(`${d.icon} ${d.title}`, () => chatMenu(g));
+function dialogueChat(d, back) {
+  const ui = chatUI(`${d.icon} ${d.title}`, back);
   let t = 0, tries = 0, name = 'friend', busy = false;
   const fill = s => s.replace(/\{name\}/g, name);
   const ask = (pre = '') => { const tn = d.turns[t]; ui.ai((pre ? pre + ' ' : '') + fill(tn.ai), tn.zh); ui.chips(tn.ex); busy = false; };
@@ -978,9 +921,9 @@ function dialogueChat(g, d) {
   });
   function finish() {
     sfx(true);
-    const e = ui.end(`<p>🎉 對話完成！</p><div class="row center"><button class="btn primary" data-again>🔁 再聊一次</button><button class="btn" data-menu>⬅ 選其他對話</button></div>`);
-    $('[data-again]', e).onclick = () => dialogueChat(g, d);
-    $('[data-menu]', e).onclick = () => chatMenu(g);
+    const e = ui.end(`<p>🎉 對話完成！</p><div class="row center"><button class="btn primary" data-again>🔁 再聊一次</button><button class="btn" data-menu>⬅ 返回</button></div>`);
+    $('[data-again]', e).onclick = () => dialogueChat(d, back);
+    $('[data-menu]', e).onclick = back;
   }
 }
 
@@ -1069,26 +1012,6 @@ function dailyCat(c, back) {
 /* =========================================================
    寫作練習
    ========================================================= */
-function writeMenu(g) {
-  const G = GRADES[g], back = () => writeMenu(g);
-  view(`${bar(`${G.name}・寫作練習`)}
-    <div class="modes">
-      ${modeCard('spell', '🔤', '拼寫測驗', '看圖、聽音寫出單字', starsHtml(starsOf(bestOf(g + '-spell') || 0)))}
-      ${modeCard('wsent', '📝', '看中文寫句子', '把中文翻成英文句子', starsHtml(starsOf(bestOf(g + '-wsent') || 0)))}
-      ${modeCard('make', '💭', '用單字造句', '自己想一個句子')}
-      ${modeCard('diary', '📔', '英文日記', '寫一小段自己的故事')}
-      ${modeCard('works', '📂', '我的作品', '看看寫過的句子')}
-    </div>`, () => gradeView(g));
-  const act = {
-    spell: () => runQuiz({ title: `${G.name}・拼寫測驗`, types: ['typeWord', 'listenSpell'], words: G.W, sentences: G.S, n: 10, key: g + '-spell', back }),
-    wsent: () => runQuiz({ title: `${G.name}・看中文寫句子`, types: ['writeSentence'], words: G.W, sentences: G.S, n: 8, key: g + '-wsent', back }),
-    make: () => makeSentence(g),
-    diary: () => diary(back),
-    works: () => works(back),
-  };
-  $$('.mode').forEach(b => b.onclick = () => act[b.dataset.m]());
-}
-
 function saveWork(title, text) {
   const list = store.get('works', []);
   list.unshift({ d: Date.now(), title, text });
@@ -1131,21 +1054,6 @@ function bindWriting(el, o) {
   };
   $('[data-read]', el).onclick = () => { if (ta.value.trim()) speak(ta.value); else toast('先寫一點東西吧！'); };
   $('[data-save]', el).onclick = () => { if (countWords(ta.value) < 1) return toast('先寫一點東西吧！'); saveWork(o.title(), ta.value.trim()); };
-}
-
-function makeSentence(g) {
-  const G = GRADES[g];
-  const w = pick(G.W);
-  const starters = STARTERS.slice(0, Math.min(STARTERS.length, 4 + (+g || 6)));
-  view(`${bar(`${G.name}・用單字造句`)}
-    <div class="card">
-      <div class="word-card"><span class="emo">${w.emoji}</span><div><b>${esc(w.en)}</b><small>${esc(w.zh)}</small></div><button class="mini" data-say="${esc(w.en)}">🔊</button></div>
-      <p class="ask">💭 用「<b>${esc(w.en)}</b>」寫一個英文句子！可以點下面的句型開頭幫忙</p>
-      ${writingBox({ starters })}
-      <div class="row center"><button class="btn ghost" data-new>🔄 換一個單字</button></div>
-    </div>`, () => writeMenu(g));
-  bindWriting(app, { must: () => [w.en], title: () => `造句：${w.en}` });
-  $('[data-new]').onclick = () => makeSentence(g);
 }
 
 function diary(back) {
@@ -1225,7 +1133,7 @@ function geptHome() {
       repeat: () => speakRepeat(),
       read: () => speakRead(0),
       answer: () => speakAnswer(),
-      interview: () => dialogueChat('gept', GRADES.gept.dialogues[0]),
+      interview: () => dialogueChat(GRADES.gept.dialogues[0], back),
     })[id]();
   });
 }
