@@ -192,7 +192,7 @@ const GEPT = {
   readComp: [
     {
       title: 'City Swimming Pool',
-      text: '🏊 City Swimming Pool\nOpen: Tuesday – Sunday, 9:00 a.m. – 8:00 p.m.\nClosed on Mondays\nTickets: Adults $100 / Children (under 12) $50\n* Please wear a swimming cap.',
+      text: 'City Swimming Pool\nOpen: Tuesday – Sunday, 9:00 a.m. – 8:00 p.m.\nClosed on Mondays\nTickets: Adults $100 / Children (under 12) $50\n* Please wear a swimming cap.',
       qs: [
         { q: 'When is the pool closed?', opts: ['On Sundays.', 'On Mondays.', 'On Tuesdays.', 'Every evening.'], a: 1 },
         { q: 'Mr. Lin and his 8-year-old son want to swim. How much will they pay?', opts: ['$100', '$150', '$200', '$50'], a: 1 },
@@ -201,7 +201,7 @@ const GEPT = {
     },
     {
       title: "Joe's Breakfast",
-      text: "🍳 Joe's Breakfast\nSandwich .......... $40\nHamburger ......... $55\nEgg pancake ....... $35\nMilk tea .......... $25\nOrange juice ...... $30\n★ Any food + any drink: $10 off!",
+      text: "Joe's Breakfast\nSandwich .......... $40\nHamburger ......... $55\nEgg pancake ....... $35\nMilk tea .......... $25\nOrange juice ...... $30\n★ Any food + any drink: $10 off!",
       qs: [
         { q: 'How much is a hamburger with an orange juice?', opts: ['$85', '$75', '$95', '$65'], a: 1 },
         { q: 'Which food is the cheapest?', opts: ['Sandwich.', 'Hamburger.', 'Egg pancake.', 'Milk tea.'], a: 2 },
@@ -227,7 +227,7 @@ const GEPT = {
     },
     {
       title: 'Class Schedule',
-      text: '📘 Class 5-2 — Wednesday\n08:40  English\n09:30  Math\n10:30  Science\n11:20  P.E. (Bring your sports shoes!)\n12:00  Lunch\n13:30  Music',
+      text: 'Class 5-2 — Wednesday\n08:40  English\n09:30  Math\n10:30  Science\n11:20  P.E. (Bring your sports shoes!)\n12:00  Lunch\n13:30  Music',
       qs: [
         { q: 'What class is after Math?', opts: ['English.', 'Science.', 'P.E.', 'Music.'], a: 1 },
         { q: 'What do students need for P.E.?', opts: ['A book.', 'A lunch box.', 'Sports shoes.', 'A piano.'], a: 2 },

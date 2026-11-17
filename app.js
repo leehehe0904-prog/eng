@@ -140,11 +140,11 @@ function voiceSettings() {
   const d = document.createElement('div');
   d.className = 'modal';
   d.innerHTML = `<div class="modal-card">
-    <h3>🔊 語音設定</h3>
-    <p class="note-s">${nClips ? `✅ 已載入 <b>${nClips}</b> 段高清男聲錄音，題目會優先使用錄音。` : '目前沒有高清錄音檔，使用瀏覽器內建語音。'}<br>沒有錄音的句子會用下面選的聲音。用 <b>Edge 瀏覽器</b>可以選到微軟的自然語音（例如 Andrew、Guy），聲音最好聽。</p>
+    <h3><i class="ic ic-say"></i> 語音設定</h3>
+    <p class="note-s">${nClips ? `已載入 <b>${nClips}</b> 段高清男聲錄音，題目會優先使用錄音。` : '目前沒有高清錄音檔，使用瀏覽器內建語音。'}<br>沒有錄音的句子會用下面選的聲音。用 <b>Edge 瀏覽器</b>可以選到微軟的自然語音（例如 Andrew、Guy），聲音最好聽。</p>
     <label>聲音：<select data-v>${vs.map(v => `<option value="${esc(v.name)}" ${VOICE.m && v.name === VOICE.m.name ? 'selected' : ''}>${esc(v.name)}</option>`).join('') || '<option>（這個瀏覽器沒有英文語音）</option>'}</select></label>
     <label>速度：<select data-r>${[[0.8, '慢一點'], [1, '正常'], [1.15, '快一點']].map(([r, t]) => `<option value="${r}" ${+pref.rate === r ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-    <div class="row center"><button class="btn" data-test>▶ 試聽</button><button class="btn primary" data-ok>完成</button></div>
+    <div class="row center"><button class="btn" data-test>試聽</button><button class="btn primary" data-ok>完成</button></div>
   </div>`;
   document.body.appendChild(d);
   const save = () => { store.set('voice', { name: $('[data-v]', d).value, rate: +$('[data-r]', d).value }); pickVoices(); };
@@ -158,7 +158,7 @@ function voiceSettings() {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRec = null;
 function recognize(btn, onText, o = {}) {
-  if (!SR) { toast('這個瀏覽器不支援語音辨識，請改用 Chrome 或 Edge 🙏'); return; }
+  if (!SR) { toast('這個瀏覽器不支援語音辨識，請改用 Chrome 或 Edge'); return; }
   if (activeRec) { activeRec.stop(); return; }
   stopSpeech();
   const r = new SR();
@@ -174,8 +174,8 @@ function recognize(btn, onText, o = {}) {
     if (o.interim) o.interim((text + live).trim());
   };
   r.onerror = e => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('請允許瀏覽器使用麥克風 🎤');
-    else if (e.error === 'no-speech') toast('沒有聽到聲音，再試一次 🎤');
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('請允許瀏覽器使用麥克風');
+    else if (e.error === 'no-speech') toast('沒有聽到聲音，再試一次');
     else if (e.error === 'network') toast('語音辨識需要網路連線');
   };
   r.onend = () => {
@@ -184,7 +184,7 @@ function recognize(btn, onText, o = {}) {
     if (text.trim()) onText(text.trim());
   };
   btn.classList.add('rec');
-  btn.innerHTML = o.recText || '⏹ 正在聽…（按這裡結束）';
+  btn.innerHTML = o.recText || '<i class="ic ic-stop"></i> 正在聽…（按這裡結束）';
   activeRec = r;
   try { r.start(); } catch (err) { activeRec = null; btn.classList.remove('rec'); btn.innerHTML = label; }
 }
@@ -199,8 +199,8 @@ function micToInput(btn, inp, o = {}) {
     inp.value = cap(t);
     inp.focus();
     inp.setSelectionRange(inp.value.length, inp.value.length);
-    toast('✅ 說完了！看看文字對不對，可以修改，再按送出');
-  }, { recText: o.recText || '⏹', continuous: o.continuous, interim: t => { inp.value = t; } });
+    toast('說完了！看看文字對不對，可以修改，再按送出');
+  }, { recText: o.recText || '<i class="ic ic-stop"></i>', continuous: o.continuous, interim: t => { inp.value = t; } });
   // 沒聽到任何聲音時，恢復原本的內容
   const restore = setInterval(() => {
     if (activeRec) return;
@@ -236,14 +236,15 @@ function toast(msg) {
   setTimeout(() => t.remove(), 2800);
 }
 function confetti() {
-  const items = ['🎉', '⭐', '🌟', '🎈', '✨', '🏆'];
-  for (let i = 0; i < 28; i++) {
+  const colors = ['#ff6b6b', '#ffa94d', '#ffd43b', '#51cf66', '#4dabf7', '#9775fa', '#f783ac'];
+  for (let i = 0; i < 40; i++) {
     const s = document.createElement('span');
     s.className = 'confetti';
-    s.textContent = pick(items);
     s.style.left = Math.random() * 100 + 'vw';
     s.style.animationDelay = Math.random() * 0.8 + 's';
-    s.style.fontSize = 18 + Math.random() * 22 + 'px';
+    s.style.background = pick(colors);
+    s.style.width = 6 + Math.random() * 8 + 'px';
+    s.style.height = 10 + Math.random() * 10 + 'px';
     document.body.appendChild(s);
     setTimeout(() => s.remove(), 3500);
   }
@@ -318,7 +319,7 @@ function checkWriting(text, must = []) {
   GRAMMAR.forEach(([re, msg]) => { const m = s.match(re); if (m) out.push({ ok: false, msg: msg.replace('$0', m[0].trim()) }); });
   return out;
 }
-const checkListHtml = list => `<ul class="checks">${list.map(c => `<li class="${c.ok ? 'ok' : 'bad'}">${c.ok ? '✅' : '⚠️'} ${esc(c.msg)}</li>`).join('')}</ul>`;
+const checkListHtml = list => `<ul class="checks">${list.map(c => `<li class="${c.ok ? 'ok' : 'bad'}">${esc(c.msg)}</li>`).join('')}</ul>`;
 
 /* ---------- 畫面切換 ---------- */
 let leaveFns = [];
@@ -333,14 +334,14 @@ function view(html, back) {
   const b = $('[data-back]', app);
   if (b && back) b.onclick = back;
 }
-const bar = (title, right = '') => `<div class="topbar"><button class="back" data-back>⬅ 返回</button><h2>${title}</h2><div class="tb-right">${right}</div></div>`;
+const bar = (title, right = '') => `<div class="topbar"><button class="back" data-back>← 返回</button><h2>${title}</h2><div class="tb-right">${right}</div></div>`;
 const starsOf = pct => (pct >= 90 ? 3 : pct >= 70 ? 2 : pct >= 40 ? 1 : 0);
 const starsHtml = n => `<span class="stars">${'★'.repeat(n)}<i>${'★'.repeat(3 - n)}</i></span>`;
 function saveBest(key, pct) { const b = store.get('best', {}); if (!(b[key] >= pct)) { b[key] = pct; store.set('best', b); } }
 const bestOf = key => store.get('best', {})[key];
 const modeCard = (id, icon, name, desc, extra = '') =>
-  `<button class="mode" data-m="${id}"><span class="mi">${icon}</span><b>${name}</b><small>${desc}</small>${extra}</button>`;
-const sayBtns = text => `<div class="say-row"><button class="say-big" data-say="${esc(text)}" title="再聽一次">🔊</button><button class="say-slow" data-say="${esc(text)}" data-slow="1">🐢 慢速</button></div>`;
+  `<button class="mode" data-m="${id}"><b>${name}</b><small>${desc}</small>${extra}</button>`;
+const sayBtns = text => `<div class="say-row"><button class="say-big" data-say="${esc(text)}" title="再聽一次"><i class="ic ic-say"></i></button><button class="say-slow" data-say="${esc(text)}" data-slow="1">慢速</button></div>`;
 
 /* =========================================================
    題型（單字・句子）
@@ -364,7 +365,7 @@ function bindOpts(el, correct, done, rev, onPick) {
 function typeAnswer(el, check, done, rev, o = {}) {
   const box = document.createElement('div');
   box.className = 'type-box';
-  box.innerHTML = `${o.mic && SR ? '<button class="mic" type="button" title="用說的">🎤</button>' : ''}<input class="type-in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${o.ph || '在這裡輸入英文'}"><button class="btn primary" data-go>✔ 檢查</button>`;
+  box.innerHTML = `${o.mic && SR ? '<button class="mic" type="button" title="用說的"><i class="ic ic-mic"></i></button>' : ''}<input class="type-in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${o.ph || '在這裡輸入英文'}"><button class="btn primary" data-go>檢查</button>`;
   el.appendChild(box);
   const inp = $('input', box), b = $('[data-go]', box), mic = $('.mic', box);
   if (mic) mic.onclick = () => micToInput(mic, inp);
@@ -407,10 +408,10 @@ function letterBoxes(el, word, revealed = 0) {
 function spellHints(el, w, lb, o = {}) {
   const box = document.createElement('div');
   box.className = 'hint-row';
-  box.innerHTML = `${o.sound ? `<button class="mini" data-say="${esc(w.en)}">🔊 聽發音</button>` : ''}
-    ${o.zh ? '<button class="mini" data-zhh>🀄 看中文</button>' : ''}
-    <button class="mini" data-more>🔤 多給一個字母</button>
-    <button class="mini" data-mix>🔀 打亂的字母</button>
+  box.innerHTML = `${o.sound ? `<button class="mini" data-say="${esc(w.en)}"><i class="ic ic-say"></i> 聽發音</button>` : ''}
+    ${o.zh ? '<button class="mini" data-zhh>看中文</button>' : ''}
+    <button class="mini" data-more>多給一個字母</button>
+    <button class="mini" data-mix>打亂的字母</button>
     <div class="hint-out"></div>`;
   el.appendChild(box);
   const out = $('.hint-out', box);
@@ -419,7 +420,7 @@ function spellHints(el, w, lb, o = {}) {
   $('[data-more]', box).onclick = e => { if (!lb.reveal()) { toast('只剩最後一個字母，自己試試看！'); e.currentTarget.disabled = true; } };
   $('[data-mix]', box).onclick = e => {
     e.currentTarget.remove();
-    out.insertAdjacentHTML('beforeend', `<div class="hint-line">🔀 用這些字母拼：${shuffleDiff(w.en.split('')).map(c => `<button type="button" class="wchip letter">${esc(c)}</button>`).join('')}</div>`);
+    out.insertAdjacentHTML('beforeend', `<div class="hint-line">用這些字母拼：${shuffleDiff(w.en.split('')).map(c => `<button type="button" class="wchip letter">${esc(c)}</button>`).join('')}</div>`);
     $$('.wchip.letter', out).forEach(c => c.onclick = () => {
       const inp = $('.type-in', el); if (!inp || inp.disabled) return;
       inp.value += c.textContent; inp.focus(); lb.set(inp.value);
@@ -431,14 +432,14 @@ function hintLadder(el, steps) {
   if (!steps.length) return;
   const box = document.createElement('div');
   box.className = 'hint-row';
-  box.innerHTML = `<button type="button" class="mini hint-btn">💡 提示（共 ${steps.length} 個）</button><div class="hint-out"></div>`;
+  box.innerHTML = `<button type="button" class="mini hint-btn">提示（共 ${steps.length} 個）</button><div class="hint-out"></div>`;
   ($('.hl', el) || el).appendChild(box);
   const btn = $('.hint-btn', box), out = $('.hint-out', box);
   let i = 0;
   btn.onclick = () => {
     out.insertAdjacentHTML('beforeend', `<div class="hint-line">${steps[i++]()}</div>`);
     if (i >= steps.length) btn.remove();
-    else btn.textContent = `💡 再一個提示（還有 ${steps.length - i} 個）`;
+    else btn.textContent = `再一個提示（還有 ${steps.length - i} 個）`;
   };
 }
 const firstHalf = s => { const t = s.split(/\s+/); return t.slice(0, Math.ceil(t.length / 2)).join(' ') + ' …'; };
@@ -455,7 +456,7 @@ function blockPuzzle(el, pieces, done, rev, o = {}) {
   w.className = 'blocks-wrap' + (o.letters ? ' letters' : '');
   w.innerHTML = `<div class="answer-line">${o.pre ? `<span class="fixed">${esc(o.pre)}</span>` : ''}<div class="answer-area"><span class="ph">點下面的積木排在這裡</span></div>${o.post ? `<span class="fixed">${esc(o.post)}</span>` : ''}</div>
     <div class="pool"></div>
-    <div class="row center"><button class="btn ghost" data-reset>↺ 重來</button><button class="btn primary" data-check disabled>✔ 檢查</button></div>`;
+    <div class="row center"><button class="btn ghost" data-reset>↺ 重來</button><button class="btn primary" data-check disabled>檢查</button></div>`;
   el.appendChild(w);
   const area = $('.answer-area', w), pool = $('.pool', w), chk = $('[data-check]', w);
   let finished = false;
@@ -505,7 +506,7 @@ const Q = {
     label: '聽音選圖',
     make(c) { if (c.words.length < 4) return null; const a = pick(c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🎧 聽一聽，選出正確的圖</p>${sayBtns(q.a.en)}${optButtons(q.opts.map(o => `<span class="emo">${o.emoji}</span><small>${esc(o.zh)}</small>`), 'pics')}`;
+      el.innerHTML = `<p class="ask">聽一聽，選出正確的圖</p>${sayBtns(q.a.en)}${optButtons(q.opts.map(o => `<span class="emo">${o.emoji}</span><small>${esc(o.zh)}</small>`), 'pics')}`;
       setTimeout(() => speak(q.a.en), 350);
       bindOpts(el, q.opts.indexOf(q.a), done, wrev(q.a));
     },
@@ -514,8 +515,8 @@ const Q = {
     label: '看圖選字',
     make(c) { if (c.words.length < 4) return null; const a = pick(c.words); return { key: a.en, a, opts: shuffle([a, ...sample(c.words.filter(w => w !== a), 3)]) }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">👀 這是什麼？選出正確的英文</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(o => esc(o.en)), 'words')}`;
-      hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => { speak(q.a.en); return '🔊 聽聽看發音'; }]);
+      el.innerHTML = `<p class="ask">這是什麼？選出正確的英文</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(o => esc(o.en)), 'words')}`;
+      hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => { speak(q.a.en); return '<i class="ic ic-say"></i> 聽聽看發音'; }]);
       bindOpts(el, q.opts.indexOf(q.a), done, wrev(q.a));
     },
   },
@@ -523,7 +524,7 @@ const Q = {
     label: '聽寫單字',
     make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✍️ 聽一聽，把單字拼出來</p>${sayBtns(q.a.en)}`;
+      el.innerHTML = `<p class="ask">聽一聽，把單字拼出來</p>${sayBtns(q.a.en)}`;
       setTimeout(() => speak(q.a.en), 350);
       const lb = letterBoxes(el, q.a.en, 0);
       spellHints(el, q.a, lb, { zh: true });
@@ -534,7 +535,7 @@ const Q = {
     label: '看圖拼字',
     make(c) { const ws = spellable(c.words); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✍️ 看圖，寫出英文單字</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div>`;
+      el.innerHTML = `<p class="ask">看圖，寫出英文單字</p><div class="big-emo">${q.a.emoji}</div><div class="zh-big">${esc(q.a.zh)}</div>`;
       const lb = letterBoxes(el, q.a.en, 1);
       spellHints(el, q.a, lb, { sound: true });
       typeAnswer(el, v => v.trim().toLowerCase() === q.a.en.toLowerCase(), done, wrev(q.a), { onInput: v => lb.set(v) });
@@ -551,8 +552,8 @@ const Q = {
     },
     render(el, q, done) {
       const shown = esc(q.a.en.slice(0, q.idx)) + '<span class="blank">_</span>' + esc(q.a.en.slice(q.idx + 1));
-      el.innerHTML = `<p class="ask">🔤 少了哪一個字母？</p><div class="big-emo sm">${q.a.emoji}</div><div class="word-show">${shown}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}">🔊</button></div><div class="hl"></div>${optButtons(q.opts.map(esc), 'letters')}`;
-      hintLadder(el, [() => { speak(q.a.en, 0.55); return '🐢 慢慢聽一次，注意空格那個音'; }]);
+      el.innerHTML = `<p class="ask">少了哪一個字母？</p><div class="big-emo sm">${q.a.emoji}</div><div class="word-show">${shown}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}"><i class="ic ic-say"></i></button></div><div class="hl"></div>${optButtons(q.opts.map(esc), 'letters')}`;
+      hintLadder(el, [() => { speak(q.a.en, 0.55); return '慢慢聽一次，注意空格那個音'; }]);
       bindOpts(el, q.opts.indexOf(q.letter), done, wrev(q.a), i => { $('.blank', el).textContent = q.opts[i]; });
     },
   },
@@ -560,7 +561,7 @@ const Q = {
     label: '字母積木',
     make(c) { const ws = spellable(c.words).filter(w => w.en.length <= 9); if (!ws.length) return null; const a = pick(ws); return { key: a.en, a }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🧱 用字母積木拼出單字</p><div class="big-emo sm">${q.a.emoji}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}">🔊</button></div>`;
+      el.innerHTML = `<p class="ask">用字母積木拼出單字</p><div class="big-emo sm">${q.a.emoji}</div><div class="zh-big sm">${esc(q.a.zh)} <button class="mini" data-say="${esc(q.a.en)}"><i class="ic ic-say"></i></button></div>`;
       hintLadder(el, [() => `第一個字母是 <b>${esc(q.a.en[0])}</b>`, () => `前半段：<b>${esc(q.a.en.slice(0, Math.ceil(q.a.en.length / 2)))}</b> …`]);
       blockPuzzle(el, q.a.en.split(''), done, wrev(q.a), { letters: true });
     },
@@ -586,8 +587,8 @@ const Q = {
       return { key: s.en, s, ans, display, opts: shuffle([ans, ...sample(pool, 3)]) };
     },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✏️ 選出正確的字填入空格</p><div class="sentence">${q.display}</div><div class="zh-big sm">${esc(q.s.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(esc), 'words')}`;
-      hintLadder(el, [() => { speak(q.s.en); return '🔊 聽整句話，找出空格的字'; }, () => `答案的第一個字母是 <b>${esc(q.ans[0])}</b>`, () => `答案有 <b>${q.ans.length}</b> 個字母`]);
+      el.innerHTML = `<p class="ask">選出正確的字填入空格</p><div class="sentence">${q.display}</div><div class="zh-big sm">${esc(q.s.zh)}</div><div class="hl"></div>${optButtons(q.opts.map(esc), 'words')}`;
+      hintLadder(el, [() => { speak(q.s.en); return '<i class="ic ic-say"></i> 聽整句話，找出空格的字'; }, () => `答案的第一個字母是 <b>${esc(q.ans[0])}</b>`, () => `答案有 <b>${q.ans.length}</b> 個字母`]);
       bindOpts(el, q.opts.indexOf(q.ans), done, { en: q.s.en, zh: q.s.zh }, i => { $('.blank', el).textContent = q.opts[i]; });
     },
   },
@@ -595,8 +596,8 @@ const Q = {
     label: '句子積木',
     make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pick(ss); return { key: s.en, s }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🧱 把積木排成正確的句子</p><div class="zh-big">${esc(q.s.zh)} <button class="mini" data-say="${esc(q.s.en)}">🔊</button></div>`;
-      hintLadder(el, [() => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => { speak(q.s.en); return '🔊 聽整句，照順序排'; }, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
+      el.innerHTML = `<p class="ask">把積木排成正確的句子</p><div class="zh-big">${esc(q.s.zh)} <button class="mini" data-say="${esc(q.s.en)}"><i class="ic ic-say"></i></button></div>`;
+      hintLadder(el, [() => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => { speak(q.s.en); return '<i class="ic ic-say"></i> 聽整句，照順序排'; }, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
       blockPuzzle(el, tokens(q.s.en), done, { en: q.s.en, zh: q.s.zh }, { post: endPunct(q.s.en) });
     },
   },
@@ -604,7 +605,7 @@ const Q = {
     label: '聽句子排積木',
     make(c) { const ss = c.sentences.filter(s => { const n = tokens(s.en).length; return n >= 3 && n <= 9; }); if (!ss.length) return null; const s = pick(ss); return { key: s.en, s }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🎧 聽句子，把積木排出來</p>${sayBtns(q.s.en)}`;
+      el.innerHTML = `<p class="ask">聽句子，把積木排出來</p>${sayBtns(q.s.en)}`;
       setTimeout(() => speak(q.s.en), 350);
       hintLadder(el, [() => `中文意思：<b>${esc(q.s.zh)}</b>`, () => `第一個字是 <b>${esc(tokens(q.s.en)[0])}</b>`, () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`]);
       blockPuzzle(el, tokens(q.s.en), done, { en: q.s.en, zh: q.s.zh }, { post: endPunct(q.s.en) });
@@ -614,8 +615,8 @@ const Q = {
     label: '聽句子選意思',
     make(c) { if (c.sentences.length < 4) return null; const s = pick(c.sentences); return { key: s.en, s, opts: shuffle([s, ...sample(c.sentences.filter(x => x !== s), 3)]) }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🎧 聽一聽，這句話是什麼意思？</p>${sayBtns(q.s.en)}<div class="hl"></div>${optButtons(q.opts.map(o => esc(o.zh)), 'zh-opts')}`;
-      hintLadder(el, [() => { speak(q.s.en, 0.55); return '🐢 慢慢再聽一次'; }, () => `英文句子：<b>${esc(q.s.en)}</b>`]);
+      el.innerHTML = `<p class="ask">聽一聽，這句話是什麼意思？</p>${sayBtns(q.s.en)}<div class="hl"></div>${optButtons(q.opts.map(o => esc(o.zh)), 'zh-opts')}`;
+      hintLadder(el, [() => { speak(q.s.en, 0.55); return '慢慢再聽一次'; }, () => `英文句子：<b>${esc(q.s.en)}</b>`]);
       setTimeout(() => speak(q.s.en), 350);
       bindOpts(el, q.opts.indexOf(q.s), done, { en: q.s.en, zh: q.s.zh });
     },
@@ -624,12 +625,12 @@ const Q = {
     label: '看中文寫句子',
     make(c) { if (!c.sentences.length) return null; const s = pick(c.sentences); return { key: s.en, s }; },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">✍️ 把這句中文寫成英文</p><div class="zh-big">${esc(q.s.zh)}</div>
+      el.innerHTML = `<p class="ask">把這句中文寫成英文</p><div class="zh-big">${esc(q.s.zh)}</div>
 `;
       hintLadder(el, [
         () => `每個字的第一個字母：<b class="mono">${esc(tokens(q.s.en).map(t => t[0] + '_'.repeat(t.length - 1)).join(' ') + endPunct(q.s.en))}</b>`,
-        () => `🔀 會用到這些字（點一下加進去）：${shuffleDiff(tokens(q.s.en)).map(t => `<button type="button" class="wchip addw">${esc(t)}</button>`).join('')}`,
-        () => { speak(q.s.en); return '🔊 聽整句（可以再按上面的提示重聽）'; },
+        () => `會用到這些字（點一下加進去）：${shuffleDiff(tokens(q.s.en)).map(t => `<button type="button" class="wchip addw">${esc(t)}</button>`).join('')}`,
+        () => { speak(q.s.en); return '<i class="ic ic-say"></i> 聽整句（可以再按上面的提示重聽）'; },
         () => `前半句：<b>${esc(firstHalf(q.s.en))}</b>`,
       ]);
       el.addEventListener('click', e => { const c = e.target.closest('.wchip.addw'); const inp = $('.type-in', el); if (c && inp && !inp.disabled) { inp.value = (inp.value.trim() + ' ' + c.textContent).trim(); inp.focus(); } });
@@ -654,10 +655,10 @@ const hintFor = ai => {
 };
 function hintHtml(h, examples, showEx) {
   return `<div class="hint-box">
-    ${h ? `<div class="pat">📝 句型：<b>${esc(h.pat)}</b></div>
-    <div class="wbank"><span>💬 點字放進去：</span>${h.words.map(w => `<button type="button" class="wchip">${esc(w)}</button>`).join('')}</div>` : ''}
-    ${examples && examples.length ? `<div class="exs" ${showEx ? '' : 'hidden'}><span>💡 例句：</span>${examples.map(x => `<button type="button" class="chip ex">${esc(x)}</button>`).join('')}</div>
-    ${showEx ? '' : '<button type="button" class="mini" data-showex>💡 還是不會？看例句</button>'}` : ''}
+    ${h ? `<div class="pat">句型：<b>${esc(h.pat)}</b></div>
+    <div class="wbank"><span>點字放進去：</span>${h.words.map(w => `<button type="button" class="wchip">${esc(w)}</button>`).join('')}</div>` : ''}
+    ${examples && examples.length ? `<div class="exs" ${showEx ? '' : 'hidden'}><span>例句：</span>${examples.map(x => `<button type="button" class="chip ex">${esc(x)}</button>`).join('')}</div>
+    ${showEx ? '' : '<button type="button" class="mini" data-showex>還是不會？看例句</button>'}` : ''}
   </div>`;
 }
 /** 把字庫的字填進輸入框：空的話先放句型，有 ___ 就填進第一個空格 */
@@ -691,7 +692,7 @@ Object.assign(Q, {
       return { key: 'match:' + set.map(w => w.en).join(), set, L: shuffle(set), R: shuffle(set) };
     },
     render(el, q, done) {
-      el.innerHTML = `<p class="ask">🔗 把英文和圖片配成一對（先點左邊，再點右邊）</p>
+      el.innerHTML = `<p class="ask">把英文和圖片配成一對（先點左邊，再點右邊）</p>
         <div class="match">
           <div class="col">${q.L.map((w, i) => `<button class="m-card m-l" data-i="${i}">${esc(w.en)}</button>`).join('')}</div>
           <div class="col">${q.R.map((w, i) => `<button class="m-card m-r" data-i="${i}"><span class="emo">${w.emoji}</span> ${esc(w.zh)}</button>`).join('')}</div>
@@ -704,7 +705,7 @@ Object.assign(Q, {
           [bl, br].forEach(b => { b.classList.remove('sel'); b.classList.add('done'); b.disabled = true; });
           matched++;
           if (matched === q.set.length) {
-            done(miss <= 1, { head: `⚠️ 配錯了 ${miss} 次，再熟悉一下：`, en: q.set.map(w => `${w.en} = ${w.zh}`).join('、'), say: false });
+            done(miss <= 1, { head: `配錯了 ${miss} 次，再熟悉一下：`, en: q.set.map(w => `${w.en} = ${w.zh}`).join('、'), say: false });
           } else sfx(true);
         } else {
           miss++; sfx(false);
@@ -727,16 +728,16 @@ Object.assign(Q, {
     render(el, q, done) {
       const t = q.t, ai = t.ai.replace(/\{name\}/g, 'friend'), h = hintFor(t.ai);
       const p = q.prev;
-      el.innerHTML = `<p class="ask">🤖 Robo 在問你問題，用英文回答它！</p>
+      el.innerHTML = `<p class="ask">Robo 在問你問題，用英文回答它！</p>
         ${p ? `<div class="chat-ctx"><small>剛剛聊到：</small>
-          <div class="msg ai"><span class="av">🤖</span><div class="bub">${esc(p.ai.replace(/\{name\}/g, 'friend'))}<div class="zh">${esc(p.zh)}</div></div></div>
-          <div class="msg me"><div class="bub">${esc(p.ex[0])}</div><span class="av">🧒</span></div></div>` : ''}
-        <div class="msg ai solo"><span class="av">🤖</span><div class="bub"><div>${esc(ai)}</div><div class="zh">${esc(t.zh)}</div>
-          <div class="tools"><button class="mini" data-say="${esc(ai)}">🔊</button><button class="mini" data-say="${esc(ai)}" data-slow="1">🐢</button><button class="mini" data-zh>中文</button></div></div></div>
+          <div class="msg ai"><span class="av bot">Robo</span><div class="bub">${esc(p.ai.replace(/\{name\}/g, 'friend'))}<div class="zh">${esc(p.zh)}</div></div></div>
+          <div class="msg me"><div class="bub">${esc(p.ex[0])}</div><span class="av kid">我</span></div></div>` : ''}
+        <div class="msg ai solo"><span class="av bot">Robo</span><div class="bub"><div>${esc(ai)}</div><div class="zh">${esc(t.zh)}</div>
+          <div class="tools"><button class="mini" data-say="${esc(ai)}"><i class="ic ic-say"></i></button><button class="mini" data-say="${esc(ai)}" data-slow="1">慢速</button><button class="mini" data-zh>中文</button></div></div></div>
         ${hintHtml(h, t.ex, false)}`;
       setTimeout(() => speak(ai), 350);
       $('[data-zh]', el).onclick = () => { const z = $('.msg.solo .zh', el); z.hidden = !z.hidden; };
-      typeAnswer(el, v => accepts(t.keys, v), done, { head: '💡 可以這樣回答：', en: t.ex[0], zh: t.zh }, { ph: h ? h.pat.split(' / ')[0] : '用英文回答…', mic: true });
+      typeAnswer(el, v => accepts(t.keys, v), done, { head: '可以這樣回答：', en: t.ex[0], zh: t.zh }, { ph: h ? h.pat.split(' / ')[0] : '用英文回答…', mic: true });
       bindHint($('.hint-box', el), () => $('.type-in', el), h);
     },
   },
@@ -751,12 +752,12 @@ Object.assign(Q, {
     },
     render(el, q, done) {
       const w = q.w;
-      el.innerHTML = `<p class="ask">💭 用「${esc(w.en)}」自己寫一個英文句子！</p>
-        <div class="word-card inline"><span class="emo">${w.emoji}</span><div><b>${esc(w.en)}</b><small>${esc(w.zh)}</small></div><button class="mini" data-say="${esc(w.en)}">🔊</button></div>
+      el.innerHTML = `<p class="ask">用「${esc(w.en)}」自己寫一個英文句子！</p>
+        <div class="word-card inline"><span class="emo">${w.emoji}</span><div><b>${esc(w.en)}</b><small>${esc(w.zh)}</small></div><button class="mini" data-say="${esc(w.en)}"><i class="ic ic-say"></i></button></div>
         <div class="starters">${STARTERS.slice(0, 6).map(s => `<button class="chip" data-st="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
-      const rev = q.ex ? { head: '💡 參考句子：', en: q.ex.en, zh: q.ex.zh } : { head: '💡 照上面的提示改一改就更好了', en: '', say: false };
+      const rev = q.ex ? { head: '參考句子：', en: q.ex.en, zh: q.ex.zh } : { head: '照上面的提示改一改就更好了', en: '', say: false };
       hintLadder(el, [
-        () => `✅ 好句子的樣子：<b>大寫開頭</b>、有用到 <b>${esc(w.en)}</b>、<b>3 個字以上</b>、最後加 <b>. ? !</b>`,
+        () => `好句子的樣子：<b>大寫開頭</b>、有用到 <b>${esc(w.en)}</b>、<b>3 個字以上</b>、最後加 <b>. ? !</b>`,
         () => `例如：<b>I like ${esc(w.en)}.</b>　<b>This is my ${esc(w.en)}.</b>　<b>It is ${esc(w.en)}.</b>（選最通順的改一改）`,
         ...(q.ex ? [() => `參考句子：<b>${esc(q.ex.en)}</b> <small>${esc(q.ex.zh)}</small>`] : []),
       ]);
@@ -787,9 +788,9 @@ Object.assign(Q, {
     },
     render(el, q, done) {
       const rev = { en: q.s.en, zh: q.s.zh };
-      el.innerHTML = `<p class="ask">🗣️ 聽一聽，按 🎤 跟著說一次</p>${sayBtns(q.s.en)}
+      el.innerHTML = `<p class="ask">聽一聽，按 <i class="ic ic-mic"></i> 跟著說一次</p>${sayBtns(q.s.en)}
         <div class="sentence">${esc(q.s.en)}</div><div class="zh-big sm">${esc(q.s.zh)}</div>
-        <div class="row center"><button class="btn primary big" data-mic>🎤 開始說</button><button class="btn ghost" data-skip>略過這題</button></div>
+        <div class="row center"><button class="btn primary big" data-mic><i class="ic ic-mic"></i> 開始說</button><button class="btn ghost" data-skip>略過這題</button></div>
         <div class="said"></div>`;
       setTimeout(() => speak(q.s.en), 350);
       let tries = 0, over = false;
@@ -800,7 +801,7 @@ Object.assign(Q, {
         if (p >= 70) finish(true);
         else if (++tries >= 2) finish(false);
         else { sfx(false); $('.said', el).innerHTML += '　再試一次！'; }
-      }, { recText: '⏹ 聽你說…' }); };
+      }, { recText: '<i class="ic ic-stop"></i> 聽你說…' }); };
       $('[data-skip]', el).onclick = () => finish(false);
     },
   },
@@ -813,46 +814,46 @@ Object.assign(Q, {
     label: '聽力・看圖辨義',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">🎧 看圖片，聽問題和 A、B、C 三個選項，選出最符合圖片的答案</p><div class="pic-scene">${it.pic}</div><div class="say-row"><button class="say-big wide" data-play>🔊 播放題目</button></div>${optButtons(['A', 'B', 'C'], 'abc')}`;
+      el.innerHTML = `<p class="ask">看圖片，聽問題和 A、B、C 三個選項，選出最符合圖片的答案</p><div class="pic-scene">${it.pic}</div><div class="say-row"><button class="say-big wide" data-play><i class="ic ic-say"></i> 播放題目</button></div>${optButtons(['A', 'B', 'C'], 'abc')}`;
       const play = () => speakSeq([{ text: it.q }, { text: 'A. ' + it.opts[0] }, { text: 'B. ' + it.opts[1] }, { text: 'C. ' + it.opts[2] }]);
       $('[data-play]', el).onclick = play; setTimeout(play, 400);
-      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `📜 聽力內容：\n${it.q}\nA. ${it.opts[0]}\nB. ${it.opts[1]}\nC. ${it.opts[2]}`, say: false });
+      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `聽力內容：\n${it.q}\nA. ${it.opts[0]}\nB. ${it.opts[1]}\nC. ${it.opts[2]}`, say: false });
     },
   },
   gQA: {
     label: '聽力・問答',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">🎧 聽一句話，選出最適合的回應</p><div class="say-row"><button class="say-big wide" data-say="${esc(it.q)}">🔊 播放題目</button></div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts')}`;
+      el.innerHTML = `<p class="ask">聽一句話，選出最適合的回應</p><div class="say-row"><button class="say-big wide" data-say="${esc(it.q)}"><i class="ic ic-say"></i> 播放題目</button></div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts')}`;
       setTimeout(() => speak(it.q), 400);
-      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `📜 聽力內容：${it.q}`, say: false });
+      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `聽力內容：${it.q}`, say: false });
     },
   },
   gDialog: {
     label: '聽力・簡短對話',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">🎧 聽一段對話和問題，選出正確答案</p><div class="say-row"><button class="say-big wide" data-play>🔊 播放對話</button></div><p class="q-print">❓ ${esc(it.q)}</p>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts')}`;
+      el.innerHTML = `<p class="ask">聽一段對話和問題，選出正確答案</p><div class="say-row"><button class="say-big wide" data-play><i class="ic ic-say"></i> 播放對話</button></div><p class="q-print">${esc(it.q)}</p>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts')}`;
       const play = () => speakSeq([...it.lines.map(([who, text]) => ({ who, text })), { text: 'Question: ' + it.q, rate: 0.8 }]);
       $('[data-play]', el).onclick = play; setTimeout(play, 400);
-      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `📜 對話內容：\n${scriptOf(it)}`, say: false });
+      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `對話內容：\n${scriptOf(it)}`, say: false });
     },
   },
   gTalk: {
     label: '聽力・短文聽解',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">🎧 聽一段短文，選出正確的圖片</p><div class="say-row"><button class="say-big wide" data-play>🔊 播放短文</button></div><p class="q-print">❓ ${esc(it.q)}</p>${optButtons(it.opts.map((o, i) => `<span class="emo">${o}</span><small>${ABC[i]}</small>`), 'pics three')}`;
+      el.innerHTML = `<p class="ask">聽一段短文，選出正確的圖片</p><div class="say-row"><button class="say-big wide" data-play><i class="ic ic-say"></i> 播放短文</button></div><p class="q-print">${esc(it.q)}</p>${optButtons(it.opts.map((o, i) => `<span class="emo">${o}</span><small>${ABC[i]}</small>`), 'pics three')}`;
       const play = () => speakSeq([{ text: it.talk }, { text: 'Question: ' + it.q, rate: 0.8 }]);
       $('[data-play]', el).onclick = play; setTimeout(play, 400);
-      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `📜 短文內容：${it.talk}`, say: false });
+      bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, note: `短文內容：${it.talk}`, say: false });
     },
   },
   gVocab: {
     label: '閱讀・詞彙',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">📖 選出最適合填入空格的答案</p><div class="sentence">${esc(it.q).replace(/_{3,}/, '<span class="blank">______</span>')}</div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
+      el.innerHTML = `<p class="ask">選出最適合填入空格的答案</p><div class="sentence">${esc(it.q).replace(/_{3,}/, '<span class="blank">______</span>')}</div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
       bindOpts(el, it.a, done, { en: `${ABC[it.a]}. ${it.opts[it.a]}`, zh: it.ex, say: false }, i => { $('.blank', el).textContent = it.opts[i]; });
     },
   },
@@ -861,7 +862,7 @@ Object.assign(Q, {
     render(el, q, done) {
       const it = q.item, n = q.n, b = it.blanks[n];
       const txt = esc(it.text).replace(/\[(\d)\]/g, (m, k) => `<span class="cz ${+k === n + 1 ? 'cur' : ''}">(${k}) ${+k === n + 1 ? '______' : '___'}</span>`);
-      el.innerHTML = `<p class="ask">📖 閱讀短文，選出第 (${n + 1}) 格的答案</p><div class="passage"><h4>${esc(it.title)}</h4>${txt}</div>${optButtons(b.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
+      el.innerHTML = `<p class="ask">閱讀短文，選出第 (${n + 1}) 格的答案</p><div class="passage"><h4>${esc(it.title)}</h4>${txt}</div>${optButtons(b.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
       bindOpts(el, b.a, done, { en: `(${n + 1}) ${ABC[b.a]}. ${b.opts[b.a]}`, zh: b.ex, say: false }, i => { $('.cz.cur', el).textContent = `(${n + 1}) ${b.opts[i]}`; });
     },
   },
@@ -869,7 +870,7 @@ Object.assign(Q, {
     label: '閱讀・閱讀理解',
     render(el, q, done) {
       const it = q.item, sq = it.qs[q.n];
-      el.innerHTML = `<p class="ask">📖 閱讀下面的內容，回答問題</p><div class="passage"><h4>${esc(it.title)}</h4>${esc(it.text)}</div><p class="q-print">❓ ${esc(sq.q)}</p>${optButtons(sq.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
+      el.innerHTML = `<p class="ask">閱讀下面的內容，回答問題</p><div class="passage"><h4>${esc(it.title)}</h4>${esc(it.text)}</div><p class="q-print">${esc(sq.q)}</p>${optButtons(sq.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
       bindOpts(el, sq.a, done, { en: `${ABC[sq.a]}. ${sq.opts[sq.a]}`, say: false });
     },
   },
@@ -877,7 +878,7 @@ Object.assign(Q, {
     label: '寫作・句子改寫',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">✍️ 依照指示改寫句子</p><div class="sentence">${esc(it.s)}</div><p class="task">👉 ${esc(it.task)}</p>`;
+      el.innerHTML = `<p class="ask">依照指示改寫句子</p><div class="sentence">${esc(it.s)}</div><p class="task">${esc(it.task)}</p>`;
       typeAnswer(el, v => it.ans.some(a => norm(a) === norm(v)), done, { en: it.ans[0], zh: it.ans.length > 1 ? '也可以：' + it.ans.slice(1).join(' / ') : '' }, { ph: '寫出改寫後的整句…' });
     },
   },
@@ -885,7 +886,7 @@ Object.assign(Q, {
     label: '寫作・句子合併',
     render(el, q, done) {
       const it = q.item;
-      el.innerHTML = `<p class="ask">✍️ 用提示的字，把兩句合併成一句</p><div class="sentence">${esc(it.a)}<br>${esc(it.b)}</div><p class="task">👉 提示：<b>${esc(it.hint)}</b></p>`;
+      el.innerHTML = `<p class="ask">用提示的字，把兩句合併成一句</p><div class="sentence">${esc(it.a)}<br>${esc(it.b)}</div><p class="task">提示：<b>${esc(it.hint)}</b></p>`;
       typeAnswer(el, v => it.ans.some(a => norm(a) === norm(v)), done, { en: it.ans[0], zh: it.ans.length > 1 ? '也可以：' + it.ans.slice(1).join(' / ') : '' }, { ph: '寫出合併後的句子…' });
     },
   },
@@ -894,7 +895,7 @@ Object.assign(Q, {
     render(el, q, done) {
       const it = q.item;
       const full = `${it.pre} ${it.parts.join(' ')}${it.post}`;
-      el.innerHTML = `<p class="ask">🧱 把積木排成正確的句子</p>`;
+      el.innerHTML = `<p class="ask">把積木排成正確的句子</p>`;
       blockPuzzle(el, it.parts, done, { en: full }, { pre: it.pre, post: it.post });
     },
   },
@@ -935,7 +936,7 @@ function runQuiz(o) {
     const q = qs[i], T = Q[q.type];
     view(`${bar(esc(o.title))}
       <div class="progress"><div style="width:${(i / qs.length) * 100}%"></div></div>
-      <div class="qmeta"><span>第 ${i + 1} / ${qs.length} 題・${T.label}</span><span class="sc">⭐ ${score}</span></div>
+      <div class="qmeta"><span>第 ${i + 1} / ${qs.length} 題・${T.label}</span><span class="sc">★ ${score}</span></div>
       <div class="card qcard"><div class="qbody"></div><div class="qfoot"></div></div>`, o.back);
     let answered = false;
     T.render($('.qbody'), q, (ok, rev) => {
@@ -944,14 +945,14 @@ function runQuiz(o) {
       if (q.sec) { sec[q.sec] = sec[q.sec] || { ok: 0, n: 0 }; sec[q.sec].n++; if (ok) sec[q.sec].ok++; }
       if (ok) score++; else wrong.push(rev);
       sfx(ok);
-      $('.sc').textContent = '⭐ ' + score;
+      $('.sc').textContent = '★ ' + score;
       const foot = $('.qfoot');
       foot.innerHTML = `<div class="feedback ${ok ? 'ok' : 'bad'}">
-          <div>${ok ? '✅ ' + pick(PRAISE) : rev.head || '❌ 正確答案：'} <b>${esc(rev.en)}</b>${rev.say === false || !rev.en ? '' : ` <button class="mini" data-say="${esc(rev.en)}">🔊</button>`}</div>
+          <div>${ok ? '' + pick(PRAISE) : rev.head || '正確答案：'} <b>${esc(rev.en)}</b>${rev.say === false || !rev.en ? '' : ` <button class="mini" data-say="${esc(rev.en)}"><i class="ic ic-say"></i></button>`}</div>
           ${rev.zh ? `<div class="zh">${esc(rev.zh)}</div>` : ''}
           ${rev.note ? `<details class="note"><summary>看內容／解析</summary>${esc(rev.note)}</details>` : ''}
         </div>
-        <button class="btn primary big" data-next>${i + 1 < qs.length ? '下一題 ➡' : '看成績 🏆'}</button>`;
+        <button class="btn primary big" data-next>${i + 1 < qs.length ? '下一題 →' : '看成績 '}</button>`;
       if (rev.say !== false && rev.en) setTimeout(() => speak(rev.en), 500);
       const nb = $('[data-next]', foot);
       nb.onclick = () => { i++; next(); };
@@ -970,17 +971,17 @@ function runQuiz(o) {
       const hist = store.get('mock', []);
       hist.unshift({ d: Date.now(), L, R });
       store.set('mock', hist.slice(0, 30));
-      mock = `<div class="mock-score"><div><small>🎧 聽力</small><b>${L}</b><span>/120</span></div><div><small>📖 閱讀</small><b>${R}</b><span>/120</span></div><div><small>總分</small><b>${L + R}</b><span>/240</span></div></div>
-        <p class="pass ${pass ? 'ok' : 'bad'}">${pass ? '🎉 以這次成績估算，可以通過英檢初級初試！繼續保持！' : '💪 還差一點！通過標準：總分 160 以上，且聽力、閱讀都要 72 分以上。'}</p>`;
+      mock = `<div class="mock-score"><div><small>聽力</small><b>${L}</b><span>/120</span></div><div><small>閱讀</small><b>${R}</b><span>/120</span></div><div><small>總分</small><b>${L + R}</b><span>/240</span></div></div>
+        <p class="pass ${pass ? 'ok' : 'bad'}">${pass ? '以這次成績估算，可以通過英檢初級初試！繼續保持！' : '還差一點！通過標準：總分 160 以上，且聽力、閱讀都要 72 分以上。'}</p>`;
     }
-    const msg = st === 3 ? '太厲害了！🏆' : st === 2 ? '做得很好！👍' : st === 1 ? '不錯喔，再加油！💪' : '多練習幾次就會進步！🌱';
+    const msg = st === 3 ? '太厲害了！' : st === 2 ? '做得很好！' : st === 1 ? '不錯喔，再加油！' : '多練習幾次就會進步！';
     view(`${bar(esc(o.title))}<div class="card result">
-        <div class="big-stars">${'⭐'.repeat(st)}<span class="dim">${'⭐'.repeat(3 - st)}</span></div>
+        <div class="big-stars">${'★'.repeat(st)}<span class="dim">${'★'.repeat(3 - st)}</span></div>
         <h2>${msg}</h2>
         <p class="score">答對 <b>${score}</b> / ${qs.length} 題（${pct} 分）</p>
         ${mock}
-        ${wrong.filter(w => w.en).length ? `<h4>📝 再複習一下：</h4><ul class="review">${wrong.filter(w => w.en).map(w => `<li>${w.say === false ? '' : `<button class="mini" data-say="${esc(w.en)}">🔊</button>`} <b>${esc(w.en)}</b> <span>${esc(w.zh || '')}</span></li>`).join('')}</ul>` : ''}
-        <div class="row center"><button class="btn primary" data-again>${o.againText || '🔁 再玩一次'}</button>${o.wordsOf ? '<button class="btn" data-words>📖 單字表</button>' : ''}<button class="btn" data-menu>${o.menuText || '⬅ 回選單'}</button></div>
+        ${wrong.filter(w => w.en).length ? `<h4>再複習一下：</h4><ul class="review">${wrong.filter(w => w.en).map(w => `<li>${w.say === false ? '' : `<button class="mini" data-say="${esc(w.en)}"><i class="ic ic-say"></i></button>`} <b>${esc(w.en)}</b> <span>${esc(w.zh || '')}</span></li>`).join('')}</ul>` : ''}
+        <div class="row center"><button class="btn primary" data-again>${o.againText || '再玩一次'}</button>${o.wordsOf ? '<button class="btn" data-words>單字表</button>' : ''}<button class="btn" data-menu>${o.menuText || '← 回選單'}</button></div>
       </div>`, o.back);
     $('[data-again]').onclick = () => runQuiz(o.rebuild ? { ...o, questions: o.rebuild() } : o);
     $('[data-menu]').onclick = o.back;
@@ -1001,20 +1002,20 @@ function home() {
   const best = store.get('best', {});
   view(`
     <section class="hero">
-      <div><h1>英文小冒險 <span>English Adventure</span></h1><p>點一個年級就開始答題！一路練到英檢初級 🚀</p></div>
-      <div class="hero-emo">🦉</div>
+      <div><h1>英文小冒險 <span>English Adventure</span></h1><p>點一個年級就開始答題！一路練到英檢初級 </p></div>
+      
     </section>
-    <button class="gept-banner" data-gept><span class="gb-icon">🎓</span><span><b>全民英檢初級特訓</b><small>聽力・閱讀・寫作・口說 ＋ 模擬考</small></span><span class="go">GO ➡</span></button>
-    <h3 class="sec">📚 選擇年級，直接開始</h3>
-    <div class="grades">${GRADE_KEYS.map(g => { const G = GRADES[g], b = best[`${g}-all`]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi">${G.icon}</span><b>${G.name}</b><small>${G.theme}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${b == null ? '▶ 開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
-    <h3 class="sec">🌟 更多練習</h3>
+    <button class="gept-banner" data-gept><span><b>全民英檢初級特訓</b><small>聽力・閱讀・寫作・口說 ＋ 模擬考</small></span><span class="go">GO →</span></button>
+    <h3 class="sec">選擇年級，直接開始</h3>
+    <div class="grades">${GRADE_KEYS.map(g => { const G = GRADES[g], b = best[`${g}-all`]; return `<button class="grade" style="--c:${G.color}" data-g="${g}"><span class="gi">${g}</span><b>${G.name}</b><small>${G.theme}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
+    <h3 class="sec">更多練習</h3>
     <div class="modes">
-      ${modeCard('daily', '🏠', '生活英文', '每天都用得到的句子')}
-      ${modeCard('free', '🤖', '自由聊天', '跟機器人 Robo 聊天')}
-      ${modeCard('diary', '📔', '英文日記', '自己寫英文句子')}
-      ${modeCard('works', '📂', '我的作品', '看看寫過的句子')}
+      ${modeCard('daily', '', '生活英文', '每天都用得到的句子')}
+      ${modeCard('free', '', '自由聊天', '跟機器人 Robo 聊天')}
+      ${modeCard('diary', '', '英文日記', '自己寫英文句子')}
+      ${modeCard('works', '', '我的作品', '看看寫過的句子')}
     </div>
-    <p class="tip">🔊 發音使用瀏覽器內建語音・🎤 說話功能建議使用 Chrome 或 Edge・進度會自動存在這台電腦</p>`);
+    <p class="tip"><i class="ic ic-say"></i> 發音使用瀏覽器內建語音・<i class="ic ic-mic"></i> 說話功能建議使用 Chrome 或 Edge・進度會自動存在這台電腦</p>`);
   $('[data-gept]').onclick = geptHome;
   $$('.grade').forEach(b => b.onclick = () => gradeView(b.dataset.g));
   const back = home;
@@ -1026,7 +1027,7 @@ function gradeView(g) {
   const G = GRADES[g];
   const daily = DAILY.filter(c => DAILY_FOR(g).includes(c.id)).flatMap(c => c.items.map(([en, zh]) => ({ en, zh })));
   const o = {
-    title: `${G.icon} ${G.name}`,
+    title: `${G.name}`,
     types: GRADE_TYPES,
     words: G.W,
     sentences: G.S.concat(sample(daily, 8)),
@@ -1034,8 +1035,8 @@ function gradeView(g) {
     n: 10,
     key: `${g}-all`,
     wordsOf: g,
-    againText: '🔁 再來 10 題',
-    menuText: g === 'gept' ? '⬅ 回英檢' : '🏠 回首頁',
+    againText: '再來 10 題',
+    menuText: g === 'gept' ? '← 回英檢' : '回首頁',
     back: g === 'gept' ? geptHome : home,
   };
   o.rebuild = () => buildQs(o);
@@ -1045,9 +1046,9 @@ function gradeView(g) {
 function wordList(g, back) {
   const G = GRADES[g];
   view(`${bar(`${G.name}・單字表`)}
-    <div class="card"><table class="wtable"><tbody>${G.W.map(w => `<tr><td class="e">${w.emoji}</td><td><b>${esc(w.en)}</b></td><td>${esc(w.zh)}</td><td><button class="mini" data-say="${esc(w.en)}">🔊</button></td></tr>`).join('')}</tbody></table></div>
-    <div class="card"><h3>📝 句子</h3><table class="wtable"><tbody>${G.S.map(s => `<tr><td><b>${esc(s.en)}</b><br><small>${esc(s.zh)}</small></td><td><button class="mini" data-say="${esc(s.en)}">🔊</button></td></tr>`).join('')}</tbody></table></div>
-    <div class="row center"><button class="btn primary big" data-go>▶ 開始答題</button></div>`, back);
+    <div class="card"><table class="wtable"><tbody>${G.W.map(w => `<tr><td class="e">${w.emoji}</td><td><b>${esc(w.en)}</b></td><td>${esc(w.zh)}</td><td><button class="mini" data-say="${esc(w.en)}"><i class="ic ic-say"></i></button></td></tr>`).join('')}</tbody></table></div>
+    <div class="card"><h3>句子</h3><table class="wtable"><tbody>${G.S.map(s => `<tr><td><b>${esc(s.en)}</b><br><small>${esc(s.zh)}</small></td><td><button class="mini" data-say="${esc(s.en)}"><i class="ic ic-say"></i></button></td></tr>`).join('')}</tbody></table></div>
+    <div class="row center"><button class="btn primary big" data-go>開始答題</button></div>`, back);
   $('[data-go]').onclick = back;
 }
 
@@ -1059,7 +1060,7 @@ function chatUI(title, back) {
     <div class="chat card">
       <div class="msgs"></div>
       <div class="chips"></div>
-      <form class="chat-in"><button type="button" class="mic" title="用說的">🎤</button><input placeholder="用英文回答…" autocomplete="off" spellcheck="false"><button class="btn primary" type="submit">送出</button></form>
+      <form class="chat-in"><button type="button" class="mic" title="用說的"><i class="ic ic-mic"></i></button><input placeholder="用英文回答…" autocomplete="off" spellcheck="false"><button class="btn primary" type="submit">送出</button></form>
     </div>`, back);
   const msgs = $('.msgs'), chips = $('.chips'), form = $('.chat-in'), inp = $('input', form);
   let handler = () => { };
@@ -1071,7 +1072,7 @@ function chatUI(title, back) {
     ai(text, zh) {
       const d = document.createElement('div');
       d.className = 'msg ai';
-      d.innerHTML = `<span class="av">🤖</span><div class="bub"><div>${esc(text)}</div>${zh ? `<div class="zh">${esc(zh)}</div>` : ''}<div class="tools"><button class="mini" data-say="${esc(text)}">🔊</button>${zh ? '<button class="mini" data-zh>中文</button>' : ''}</div></div>`;
+      d.innerHTML = `<span class="av bot">Robo</span><div class="bub"><div>${esc(text)}</div>${zh ? `<div class="zh">${esc(zh)}</div>` : ''}<div class="tools"><button class="mini" data-say="${esc(text)}"><i class="ic ic-say"></i></button>${zh ? '<button class="mini" data-zh>中文</button>' : ''}</div></div>`;
       const zb = $('[data-zh]', d);
       if (zb) zb.onclick = () => { const z = $('.zh', d); z.hidden = !z.hidden; };
       msgs.appendChild(d); scroll();
@@ -1085,7 +1086,7 @@ function chatUI(title, back) {
         if (/(^|[^A-Za-z'])i([^A-Za-z']|$)/.test(text)) tip = '小提醒：「我」要寫大寫的 I 喔';
         else if (/^[a-z]/.test(text) && countWords(text) >= 3) tip = '小提醒：句子開頭要大寫喔';
       }
-      d.innerHTML = `<div class="bub">${esc(text)}${tip ? `<div class="tip-s">💡 ${tip}</div>` : ''}</div><span class="av">🧒</span>`;
+      d.innerHTML = `<div class="bub">${esc(text)}${tip ? `<div class="tip-s">${tip}</div>` : ''}</div><span class="av kid">我</span>`;
       msgs.appendChild(d); scroll();
     },
     chips(list, h) {
@@ -1118,7 +1119,7 @@ function extractName(text) {
 }
 
 function dialogueChat(d, back) {
-  const ui = chatUI(`${d.icon} ${d.title}`, back);
+  const ui = chatUI(`${d.title}`, back);
   let t = 0, tries = 0, name = 'friend', busy = false;
   const fill = s => s.replace(/\{name\}/g, name);
   const ask = (pre = '') => { const tn = d.turns[t]; ui.ai((pre ? pre + ' ' : '') + fill(tn.ai), tn.zh); ui.chips(tn.ex, hintFor(tn.ai)); busy = false; };
@@ -1133,7 +1134,7 @@ function dialogueChat(d, back) {
       tries = 0; t++;
       const pr = pick(['Great!', 'Nice!', 'Good job!', 'Cool!', 'Wonderful!', 'Awesome!']);
       if (t < d.turns.length) setTimeout(() => ask(pr), 700);
-      else setTimeout(() => { ui.ai(`${pr} You did it, ${name}! See you next time! 👋`, '你完成了！下次見！'); finish(); }, 700);
+      else setTimeout(() => { ui.ai(`${pr} You did it, ${name}! See you next time! `, '你完成了！下次見！'); finish(); }, 700);
     } else {
       tries++;
       if (tries >= 2) {
@@ -1149,7 +1150,7 @@ function dialogueChat(d, back) {
   });
   function finish() {
     sfx(true);
-    const e = ui.end(`<p>🎉 對話完成！</p><div class="row center"><button class="btn primary" data-again>🔁 再聊一次</button><button class="btn" data-menu>⬅ 返回</button></div>`);
+    const e = ui.end(`<p>對話完成！</p><div class="row center"><button class="btn primary" data-again>再聊一次</button><button class="btn" data-menu>← 返回</button></div>`);
     $('[data-again]', e).onclick = () => dialogueChat(d, back);
     $('[data-menu]', e).onclick = back;
   }
@@ -1160,36 +1161,36 @@ function botReply(raw, st) {
   const t = norm(raw);
   let m;
   if (!/[a-z0-9]/.test(t)) return ["Sorry, I don't understand. Can you say it in English?", '對不起，我看不懂。可以用英文說嗎？', false];
-  if (/\b(bye|goodbye|see you)\b/.test(t)) return ['Bye-bye! It was nice talking with you! 👋', '掰掰！跟你聊天很開心！', 'end'];
+  if (/\b(bye|goodbye|see you)\b/.test(t)) return ['Bye-bye! It was nice talking with you!', '掰掰！跟你聊天很開心！', 'end'];
   if (/\bhow are you\b/.test(t)) return ["I'm great, thank you! And you?", '我很好，謝謝！那你呢？', false];
-  if (/\bwhat is your name\b|\bwho are you\b/.test(t)) return ["I'm Robo, a robot who loves English! 🤖", '我是 Robo，一個愛英文的機器人！', true];
-  if (/\bhow old are you\b/.test(t)) return ["I'm a robot, so I'm only one year old! 😄", '我是機器人，所以我才一歲！', true];
+  if (/\bwhat is your name\b|\bwho are you\b/.test(t)) return ["I'm Robo, a robot who loves English! ", '我是 Robo，一個愛英文的機器人！', true];
+  if (/\bhow old are you\b/.test(t)) return ["I'm a robot, so I'm only one year old! ", '我是機器人，所以我才一歲！', true];
   if ((m = t.match(/\b(?:my name is|call me)\s+([a-z]+)/))) { st.name = cap(m[1]); return [`Nice to meet you, ${st.name}!`, `很高興認識你，${st.name}！`, true]; }
   if ((m = t.match(/\bi am (\d+|[a-z]+) years? old\b|\bi am (\d+)\b/))) return ["Wow! You're so smart for your age!", '哇！你年紀小小好聰明！', true];
-  if (/\b(sad|tired|sick|bad|angry|not good|not fine|bored)\b/.test(t)) return ['Oh no! I hope you feel better soon. 💛', '噢不！希望你很快好起來。', true];
-  if (/\b(fine|good|great|ok|happy|well|excited)\b/.test(t) && t.split(' ').length <= 6) return ["I'm glad to hear that! 😊", '很高興聽你這麼說！', true];
+  if (/\b(sad|tired|sick|bad|angry|not good|not fine|bored)\b/.test(t)) return ['Oh no! I hope you feel better soon.', '噢不！希望你很快好起來。', true];
+  if (/\b(fine|good|great|ok|happy|well|excited)\b/.test(t) && t.split(' ').length <= 6) return ["I'm glad to hear that! ", '很高興聽你這麼說！', true];
   if ((m = t.match(/\bdo you like ([a-z ]+)/))) return [`Yes! I like ${m[1]} very much!`, `是的！我很喜歡 ${m[1]}！`, true];
   if ((m = t.match(/\bi (?:like|love) (?:to )?([a-z ]+)/))) return [`Wow, you like ${m[1]}! That's cool!`, `哇，你喜歡 ${m[1]}！好酷！`, true];
   if ((m = t.match(/\bmy favorite [a-z]+ is ([a-z ]+)/))) return [`${cap(m[1])}? Nice choice!`, `${m[1]}？好選擇！`, true];
   if ((m = t.match(/\bi want to be (?:a |an )?([a-z ]+)/))) return [`A ${m[1]}? That's a great dream! Study hard!`, `${m[1]}？好棒的夢想！要加油喔！`, true];
-  if (/\b(thank|thanks)\b/.test(t)) return ["You're welcome! 😊", '不客氣！', true];
+  if (/\b(thank|thanks)\b/.test(t)) return ["You're welcome! ", '不客氣！', true];
   if (/\b(sunny|rainy|cloudy|windy|hot|cold|raining|snowing)\b/.test(t)) return ["I see! Don't forget to wear the right clothes.", '了解！記得穿適合的衣服喔。', true];
-  if (/\b(dog|cat|bird|fish|rabbit|hamster|turtle)s?\b/.test(t) && /\b(have|got)\b/.test(t)) return ["You have a pet? That's so cute! 🐾", '你有寵物？好可愛！', true];
-  if (/\b(yesterday|last)\b/.test(t) || /\b(went|played|watched|ate|visited|saw|had)\b/.test(t)) return ['That sounds fun! 😃', '聽起來很好玩！', true];
-  if (/\?\s*$/.test(raw) || /^(what|where|who|how|why|when|do|does|can|are|is)\b/.test(t)) return ["Good question! I'm a robot, so I'm still learning. 🤖", '好問題！我是機器人，還在學習中。', true];
-  if (/^(yes|yeah|yep|sure)\b/.test(t)) return ['Cool! 😄', '酷！', true];
+  if (/\b(dog|cat|bird|fish|rabbit|hamster|turtle)s?\b/.test(t) && /\b(have|got)\b/.test(t)) return ["You have a pet? That's so cute! ", '你有寵物？好可愛！', true];
+  if (/\b(yesterday|last)\b/.test(t) || /\b(went|played|watched|ate|visited|saw|had)\b/.test(t)) return ['That sounds fun!', '聽起來很好玩！', true];
+  if (/\?\s*$/.test(raw) || /^(what|where|who|how|why|when|do|does|can|are|is)\b/.test(t)) return ["Good question! I'm a robot, so I'm still learning. ", '好問題！我是機器人，還在學習中。', true];
+  if (/^(yes|yeah|yep|sure)\b/.test(t)) return ['Cool!', '酷！', true];
   if (/^(no|nope)\b/.test(t)) return ['Oh, I see.', '喔，我懂了。', true];
-  if (/^(hi|hello|hey)\b/.test(t)) return ['Hello! Nice to see you! 👋', '哈囉！很高興見到你！', true];
+  if (/^(hi|hello|hey)\b/.test(t)) return ['Hello! Nice to see you!', '哈囉！很高興見到你！', true];
   return [pick(["That's interesting!", 'Wow, really?', 'I see!', 'Cool!']), '真有趣！', true];
 }
 function freeChat(back) {
-  const ui = chatUI('🗨️ 自由聊天', back);
+  const ui = chatUI('自由聊天', back);
   const st = { name: null, order: shuffle(BOT_QUESTIONS), qi: 0 };
   const nextQ = () => {
     const q = st.order[st.qi++ % st.order.length];
     ui.ai(q[0], q[1]); ui.chips(q[2], hintFor(q[0]));
   };
-  ui.ai("Hi! I'm Robo 🤖. Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
+  ui.ai("Hi! I'm Robo . Let's talk in English!", '嗨！我是 Robo。我們用英文聊天吧！');
   setTimeout(nextQ, 400);
   ui.onSend((text, typed) => {
     ui.me(text, typed);
@@ -1197,7 +1198,7 @@ function freeChat(back) {
     setTimeout(() => {
       ui.ai(en, zh);
       if (more === 'end') {
-        const e = ui.end(`<p>👋 聊天結束！</p><div class="row center"><button class="btn primary" data-again>🔁 再聊一次</button><button class="btn" data-menu>⬅ 返回</button></div>`);
+        const e = ui.end(`<p>聊天結束！</p><div class="row center"><button class="btn primary" data-again>再聊一次</button><button class="btn" data-menu>← 返回</button></div>`);
         $('[data-again]', e).onclick = () => freeChat(back);
         $('[data-menu]', e).onclick = back;
       } else if (more) setTimeout(nextQ, 300);
@@ -1210,10 +1211,10 @@ function freeChat(back) {
    生活英文
    ========================================================= */
 function dailyMenu(back) {
-  view(`${bar('🏠 生活英文')}
-    <p class="ask center">每天都用得到的英文句子！先聽、再跟著唸，最後做練習 💪</p>
+  view(`${bar('生活英文')}
+    <p class="ask center">每天都用得到的英文句子！先聽、再跟著唸，最後做練習 </p>
     <div class="modes">${DAILY.map(c => modeCard(c.id, c.icon, c.name, `${c.items.length} 個句子`, starsHtml(starsOf(bestOf('daily-' + c.id) || 0)))).join('')}
-    ${modeCard('all', '🎲', '全部混合練習', '所有生活句子隨機出題', starsHtml(starsOf(bestOf('daily-all') || 0)))}</div>`, back);
+    ${modeCard('all', '', '全部混合練習', '所有生活句子隨機出題', starsHtml(starsOf(bestOf('daily-all') || 0)))}</div>`, back);
   $$('.mode').forEach(b => b.onclick = () => {
     if (b.dataset.m === 'all') {
       runQuiz({ title: '生活英文・混合練習', types: ['listenSentenceZh', 'sentenceBlocks', 'listenBlocks', 'fillSentence', 'writeSentence'], words: ALL_WORDS, sentences: DAILY.flatMap(c => c.items.map(([en, zh]) => ({ en, zh }))), n: 12, key: 'daily-all', back: () => dailyMenu(back) });
@@ -1222,17 +1223,17 @@ function dailyMenu(back) {
 }
 function dailyCat(c, back) {
   const S = c.items.map(([en, zh]) => ({ en, zh }));
-  view(`${bar(`${c.icon} ${c.name}`)}
+  view(`${bar(`${c.name}`)}
     <div class="card"><ul class="daily">${S.map((s, i) => `<li><div><b>${esc(s.en)}</b><small>${esc(s.zh)}</small><div class="res" data-r="${i}"></div></div>
-      <div class="acts"><button class="mini" data-say="${esc(s.en)}">🔊</button><button class="mini" data-say="${esc(s.en)}" data-slow="1">🐢</button><button class="mini" data-mic="${i}">🎤 跟讀</button></div></li>`).join('')}</ul></div>
-    <div class="row center"><button class="btn primary big" data-practice>📝 開始練習</button></div>`, () => dailyMenu(back));
+      <div class="acts"><button class="mini" data-say="${esc(s.en)}"><i class="ic ic-say"></i></button><button class="mini" data-say="${esc(s.en)}" data-slow="1">慢速</button><button class="mini" data-mic="${i}"><i class="ic ic-mic"></i> 跟讀</button></div></li>`).join('')}</ul></div>
+    <div class="row center"><button class="btn primary big" data-practice>開始練習</button></div>`, () => dailyMenu(back));
   $$('[data-mic]').forEach(b => b.onclick = () => {
     const i = +b.dataset.mic;
     recognize(b, t => {
       const p = Math.round(similarity(S[i].en, t) * 100);
-      $(`[data-r="${i}"]`).innerHTML = `你說：「${esc(t)}」 <b class="${p >= 80 ? 'g' : 'r'}">${p} 分</b> ${p >= 80 ? '🌟' : '再試試！'}`;
+      $(`[data-r="${i}"]`).innerHTML = `你說：「${esc(t)}」 <b class="${p >= 80 ? 'g' : 'r'}">${p} 分</b> ${p >= 80 ? '' : '再試試！'}`;
       sfx(p >= 80);
-    }, { recText: '⏹ 聽你說' });
+    }, { recText: '<i class="ic ic-stop"></i> 聽你說' });
   });
   $('[data-practice]').onclick = () => runQuiz({ title: `${c.name}・練習`, types: ['listenSentenceZh', 'sentenceBlocks', 'listenBlocks', 'fillSentence', 'writeSentence'], words: ALL_WORDS, sentences: S, n: 8, key: 'daily-' + c.id, back: () => dailyCat(c, back) });
 }
@@ -1244,7 +1245,7 @@ function saveWork(title, text) {
   const list = store.get('works', []);
   list.unshift({ d: Date.now(), title, text });
   store.set('works', list.slice(0, 200));
-  toast('💾 已存到「我的作品」');
+  toast('已存到「我的作品」');
 }
 
 function writingBox(o) {
@@ -1253,9 +1254,9 @@ function writingBox(o) {
     <textarea class="write" rows="${o.rows || 3}" placeholder="在這裡用英文寫…" spellcheck="false"></textarea>
     <div class="wc">0 個字</div>
     <div class="row center">
-      <button class="btn primary" data-check>🔍 幫我檢查</button>
-      <button class="btn" data-read>🔊 唸給我聽</button>
-      <button class="btn" data-save>💾 儲存</button>
+      <button class="btn primary" data-check>幫我檢查</button>
+      <button class="btn" data-read><i class="ic ic-say"></i> 唸給我聽</button>
+      <button class="btn" data-save>儲存</button>
     </div>
     <div class="check-out"></div>`;
 }
@@ -1276,7 +1277,7 @@ function bindWriting(el, o) {
     if (o.target) { const n = countWords(ta.value); list.push(n >= o.target ? { ok: true, msg: `字數足夠（${n} 字）` } : { ok: false, msg: `字數還不夠，目標約 ${o.target} 字（現在 ${n} 字）` }); }
     if (ta.value.includes('___')) list.push({ ok: false, msg: '還有 ___ 沒有填完喔' });
     const good = list.every(c => c.ok);
-    out.innerHTML = checkListHtml(list) + (good ? '<p class="great">🌟 寫得很棒！可以按「儲存」收藏起來！</p>' : '');
+    out.innerHTML = checkListHtml(list) + (good ? '<p class="great">寫得很棒！可以按「儲存」收藏起來！</p>' : '');
     sfx(good);
     if (good) confetti();
   };
@@ -1285,22 +1286,22 @@ function bindWriting(el, o) {
 }
 
 function diary(back) {
-  view(`${bar('📔 英文日記')}
-    <p class="ask center">選一個題目，寫一小段英文！不會寫的字可以先用簡單的字代替 😊</p>
+  view(`${bar('英文日記')}
+    <p class="ask center">選一個題目，寫一小段英文！不會寫的字可以先用簡單的字代替 </p>
     <div class="modes">${DIARY_PROMPTS.map((p, i) => modeCard('p' + i, p.icon, p.title, p.zh)).join('')}</div>`, back);
   $$('.mode').forEach(b => b.onclick = () => diaryWrite(DIARY_PROMPTS[+b.dataset.m.slice(1)], () => diary(back)));
 }
 function diaryWrite(p, back) {
-  view(`${bar(`${p.icon} ${p.title}`)}
-    <div class="card"><p class="ask">✍️ 題目：<b>${esc(p.title)}</b>（${esc(p.zh)}）<br><small>點句型開頭加到文章裡，再把 ___ 換成你自己的話</small></p>
+  view(`${bar(`${p.title}`)}
+    <div class="card"><p class="ask">題目：<b>${esc(p.title)}</b>（${esc(p.zh)}）<br><small>點句型開頭加到文章裡，再把 ___ 換成你自己的話</small></p>
     ${writingBox({ starters: p.starters, rows: 7 })}</div>`, back);
   bindWriting(app, { title: () => p.title, target: 30 });
 }
 
 function works(back) {
   const list = store.get('works', []);
-  view(`${bar('📂 我的作品')}
-    ${list.length ? list.map((w, i) => `<div class="card work"><div class="wh"><b>${esc(w.title)}</b><small>${new Date(w.d).toLocaleString('zh-TW')}</small></div><p>${esc(w.text)}</p><div class="row"><button class="mini" data-say="${esc(w.text)}">🔊 朗讀</button><button class="mini" data-del="${i}">🗑️ 刪除</button></div></div>`).join('') : '<div class="card center"><p>還沒有作品喔！去「寫作練習」寫寫看吧 ✍️</p></div>'}`, back);
+  view(`${bar('我的作品')}
+    ${list.length ? list.map((w, i) => `<div class="card work"><div class="wh"><b>${esc(w.title)}</b><small>${new Date(w.d).toLocaleString('zh-TW')}</small></div><p>${esc(w.text)}</p><div class="row"><button class="mini" data-say="${esc(w.text)}"><i class="ic ic-say"></i> 朗讀</button><button class="mini" data-del="${i}">刪除</button></div></div>`).join('') : '<div class="card center"><p>還沒有作品喔！去「寫作練習」寫寫看吧 </p></div>'}`, back);
   $$('[data-del]').forEach(b => b.onclick = () => {
     if (!confirm('確定要刪除這篇作品嗎？')) return;
     const l = store.get('works', []); l.splice(+b.dataset.del, 1); store.set('works', l); works(back);
@@ -1311,44 +1312,44 @@ function works(back) {
    全民英檢初級特訓
    ========================================================= */
 const G_PARTS = [
-  { id: 'gPic', grp: 'L', icon: '🖼️', name: '第一部分 看圖辨義', desc: '看圖、聽問題，選出符合的描述', build: () => sample(GEPT.listenPic, 8).map(item => ({ type: 'gPic', item })) },
-  { id: 'gQA', grp: 'L', icon: '💬', name: '第二部分 問答', desc: '聽一句話，選出最適合的回應', build: () => sample(GEPT.listenQA, 10).map(item => ({ type: 'gQA', item })) },
-  { id: 'gDialog', grp: 'L', icon: '👫', name: '第三部分 簡短對話', desc: '聽男女對話，回答問題', build: () => sample(GEPT.listenDialog, 8).map(item => ({ type: 'gDialog', item })) },
-  { id: 'gTalk', grp: 'L', icon: '📢', name: '第四部分 短文聽解', desc: '聽一段短文，選出正確圖片', build: () => sample(GEPT.listenTalk, 6).map(item => ({ type: 'gTalk', item })) },
-  { id: 'gVocab', grp: 'R', icon: '🔤', name: '第一部分 詞彙', desc: '選出最適合的字（含文法解析）', build: () => sample(GEPT.readVocab, 10).map(item => ({ type: 'gVocab', item })) },
-  { id: 'gCloze', grp: 'R', icon: '📄', name: '第二部分 段落填空', desc: '讀短文，選出空格的答案', build: () => { const p = sample(GEPT.readCloze, 2); return p.flatMap(item => item.blanks.map((_, n) => ({ type: 'gCloze', item, n }))); } },
-  { id: 'gComp', grp: 'R', icon: '📰', name: '第三部分 閱讀理解', desc: '讀告示、菜單、信件並回答', build: () => { const p = sample(GEPT.readComp, 3); return p.flatMap(item => item.qs.map((_, n) => ({ type: 'gComp', item, n }))); } },
-  { id: 'gRewrite', grp: 'W', icon: '🔁', name: '單句寫作：句子改寫', desc: '改成問句、否定句、過去式…', build: () => sample(GEPT.rewrite, 8).map(item => ({ type: 'gRewrite', item })) },
-  { id: 'gCombine', grp: 'W', icon: '🔗', name: '單句寫作：句子合併', desc: '用 and / but / because… 合併', build: () => sample(GEPT.combine, 8).map(item => ({ type: 'gCombine', item })) },
-  { id: 'gReorder', grp: 'W', icon: '🧱', name: '單句寫作：重組', desc: '用積木把句子排出來', build: () => sample(GEPT.reorder, 8).map(item => ({ type: 'gReorder', item })) },
+  { id: 'gPic', grp: 'L', icon: '', name: '第一部分 看圖辨義', desc: '看圖、聽問題，選出符合的描述', build: () => sample(GEPT.listenPic, 8).map(item => ({ type: 'gPic', item })) },
+  { id: 'gQA', grp: 'L', icon: '', name: '第二部分 問答', desc: '聽一句話，選出最適合的回應', build: () => sample(GEPT.listenQA, 10).map(item => ({ type: 'gQA', item })) },
+  { id: 'gDialog', grp: 'L', icon: '', name: '第三部分 簡短對話', desc: '聽男女對話，回答問題', build: () => sample(GEPT.listenDialog, 8).map(item => ({ type: 'gDialog', item })) },
+  { id: 'gTalk', grp: 'L', icon: '', name: '第四部分 短文聽解', desc: '聽一段短文，選出正確圖片', build: () => sample(GEPT.listenTalk, 6).map(item => ({ type: 'gTalk', item })) },
+  { id: 'gVocab', grp: 'R', icon: '', name: '第一部分 詞彙', desc: '選出最適合的字（含文法解析）', build: () => sample(GEPT.readVocab, 10).map(item => ({ type: 'gVocab', item })) },
+  { id: 'gCloze', grp: 'R', icon: '', name: '第二部分 段落填空', desc: '讀短文，選出空格的答案', build: () => { const p = sample(GEPT.readCloze, 2); return p.flatMap(item => item.blanks.map((_, n) => ({ type: 'gCloze', item, n }))); } },
+  { id: 'gComp', grp: 'R', icon: '', name: '第三部分 閱讀理解', desc: '讀告示、菜單、信件並回答', build: () => { const p = sample(GEPT.readComp, 3); return p.flatMap(item => item.qs.map((_, n) => ({ type: 'gComp', item, n }))); } },
+  { id: 'gRewrite', grp: 'W', icon: '', name: '單句寫作：句子改寫', desc: '改成問句、否定句、過去式…', build: () => sample(GEPT.rewrite, 8).map(item => ({ type: 'gRewrite', item })) },
+  { id: 'gCombine', grp: 'W', icon: '', name: '單句寫作：句子合併', desc: '用 and / but / because… 合併', build: () => sample(GEPT.combine, 8).map(item => ({ type: 'gCombine', item })) },
+  { id: 'gReorder', grp: 'W', icon: '', name: '單句寫作：重組', desc: '用積木把句子排出來', build: () => sample(GEPT.reorder, 8).map(item => ({ type: 'gReorder', item })) },
 ];
 
 function geptHome() {
   const card = p => modeCard(p.id, p.icon, p.name, p.desc, starsHtml(starsOf(bestOf('gept-' + p.id) || 0)));
   const hist = store.get('mock', []);
-  view(`${bar('🎓 全民英檢初級特訓')}
+  view(`${bar('全民英檢初級特訓')}
     <div class="card gept-intro">
       <h3>英檢初級考什麼？</h3>
       <div class="exam-grid">
-        <div><b>📝 初試</b><span>🎧 聽力：看圖辨義、問答、簡短對話、短文聽解</span><span>📖 閱讀：詞彙、段落填空、閱讀理解</span><small>聽力、閱讀各 120 分；總分 160 以上且單項不低於 72 分即通過</small></div>
-        <div><b>🗣️ 複試（初試通過後）</b><span>✍️ 寫作：單句寫作（改寫・合併・重組）、段落寫作</span><span>🎤 口說：複誦、朗讀、回答問題</span><small>寫作、口說分別計分</small></div>
+        <div><b>初試</b><span>聽力：看圖辨義、問答、簡短對話、短文聽解</span><span>閱讀：詞彙、段落填空、閱讀理解</span><small>聽力、閱讀各 120 分；總分 160 以上且單項不低於 72 分即通過</small></div>
+        <div><b>複試（初試通過後）</b><span>寫作：單句寫作（改寫・合併・重組）、段落寫作</span><span>口說：複誦、朗讀、回答問題</span><small>寫作、口說分別計分</small></div>
       </div>
       <p class="note-s">程度約為國中畢業，需要認得約 2,000 個常用字。題數與計分方式以 LTTC 語言訓練測驗中心最新公告為準。</p>
     </div>
     <div class="modes">
-      ${modeCard('mock', '🏆', '初試模擬考', '聽力＋閱讀，算出預估分數', hist.length ? `<span class="badge">上次 ${hist[0].L + hist[0].R} 分</span>` : '')}
-      ${modeCard('vocab', '📚', '英檢常用單字', '單字卡、配對、打地鼠…')}
+      ${modeCard('mock', '', '初試模擬考', '聽力＋閱讀，算出預估分數', hist.length ? `<span class="badge">上次 ${hist[0].L + hist[0].R} 分</span>` : '')}
+      ${modeCard('vocab', '', '英檢常用單字', '單字、句子、對話綜合練習')}
     </div>
-    <h3 class="sec">🎧 初試・聽力</h3><div class="modes">${G_PARTS.filter(p => p.grp === 'L').map(card).join('')}</div>
-    <h3 class="sec">📖 初試・閱讀</h3><div class="modes">${G_PARTS.filter(p => p.grp === 'R').map(card).join('')}</div>
-    <h3 class="sec">✍️ 複試・寫作</h3><div class="modes">${G_PARTS.filter(p => p.grp === 'W').map(card).join('')}${modeCard('para', '🖼️', '段落寫作（看圖）', '看三張圖寫約 50 字短文')}</div>
-    <h3 class="sec">🎤 複試・口說</h3><div class="modes">
-      ${modeCard('repeat', '🔁', '第一部分 複誦', '聽一句，跟著說一次')}
-      ${modeCard('read', '📢', '第二部分 朗讀', '把短文大聲唸出來')}
-      ${modeCard('answer', '🙋', '第三部分 回答問題', '聽問題，15 秒內回答')}
-      ${modeCard('interview', '🤖', '口說面試練習', '跟 Robo 模擬問答')}
+    <h3 class="sec">初試・聽力</h3><div class="modes">${G_PARTS.filter(p => p.grp === 'L').map(card).join('')}</div>
+    <h3 class="sec">初試・閱讀</h3><div class="modes">${G_PARTS.filter(p => p.grp === 'R').map(card).join('')}</div>
+    <h3 class="sec">複試・寫作</h3><div class="modes">${G_PARTS.filter(p => p.grp === 'W').map(card).join('')}${modeCard('para', '', '段落寫作（看圖）', '看三張圖寫約 50 字短文')}</div>
+    <h3 class="sec">複試・口說</h3><div class="modes">
+      ${modeCard('repeat', '', '第一部分 複誦', '聽一句，跟著說一次')}
+      ${modeCard('read', '', '第二部分 朗讀', '把短文大聲唸出來')}
+      ${modeCard('answer', '', '第三部分 回答問題', '聽問題，15 秒內回答')}
+      ${modeCard('interview', '', '口說面試練習', '跟 Robo 模擬問答')}
     </div>
-    ${hist.length ? `<div class="card"><h3>📈 模擬考紀錄</h3><ul class="hist">${hist.slice(0, 8).map(h => `<li><span>${new Date(h.d).toLocaleDateString('zh-TW')}</span><span>聽力 ${h.L}</span><span>閱讀 ${h.R}</span><b class="${h.L + h.R >= 160 && h.L >= 72 && h.R >= 72 ? 'g' : 'r'}">總分 ${h.L + h.R}</b></li>`).join('')}</ul></div>` : ''}`, home);
+    ${hist.length ? `<div class="card"><h3>模擬考紀錄</h3><ul class="hist">${hist.slice(0, 8).map(h => `<li><span>${new Date(h.d).toLocaleDateString('zh-TW')}</span><span>聽力 ${h.L}</span><span>閱讀 ${h.R}</span><b class="${h.L + h.R >= 160 && h.L >= 72 && h.R >= 72 ? 'g' : 'r'}">總分 ${h.L + h.R}</b></li>`).join('')}</ul></div>` : ''}`, home);
   const back = geptHome;
   $$('.mode').forEach(b => b.onclick = () => {
     const id = b.dataset.m;
@@ -1386,43 +1387,43 @@ function buildMock() {
 /* ---------- 段落寫作 ---------- */
 function geptParagraph(idx) {
   const p = GEPT.paragraph[idx];
-  view(`${bar('🖼️ 段落寫作（看圖）')}
+  view(`${bar('段落寫作（看圖）')}
     <div class="card">
       <div class="panels">${p.panels.map((x, i) => `<div class="panel"><span class="pn">${i + 1}</span>${x}</div>`).join('')}</div>
-      <p class="ask">✍️ ${esc(p.task)}</p>
+      <p class="ask">${esc(p.task)}</p>
       <p class="kw">可以用的字：${p.words.map(w => `<span class="chip static">${esc(w)}</span>`).join(' ')}</p>
       ${writingBox({ starters: [], rows: 7 })}
-      <details class="sample"><summary>📖 看範文（先自己寫完再看喔！）</summary><p>${esc(p.sample)}</p><button class="mini" data-say="${esc(p.sample)}">🔊 朗讀範文</button></details>
-      <div class="row center"><button class="btn ghost" data-new>🔄 換一題</button></div>
-      <p class="note-s">💡 英檢評分重點：內容符合圖片、句子文法正確、有用連接詞（and, but, so, because, then）讓文章通順、拼字與標點正確。</p>
+      <details class="sample"><summary>看範文（先自己寫完再看喔！）</summary><p>${esc(p.sample)}</p><button class="mini" data-say="${esc(p.sample)}"><i class="ic ic-say"></i> 朗讀範文</button></details>
+      <div class="row center"><button class="btn ghost" data-new>換一題</button></div>
+      <p class="note-s">英檢評分重點：內容符合圖片、句子文法正確、有用連接詞（and, but, so, because, then）讓文章通順、拼字與標點正確。</p>
     </div>`, geptHome);
   bindWriting(app, { title: () => '看圖寫作：' + p.title, target: 40 });
   $('[data-new]').onclick = () => geptParagraph((idx + 1) % GEPT.paragraph.length);
 }
 
 /* ---------- 口說：複誦 ---------- */
-const scoreMsg = p => (p >= 90 ? '🌟 非常好！' : p >= 70 ? '👍 不錯！再說清楚一點' : p >= 40 ? '💪 有進步空間，再試一次' : '🤔 再聽一次，跟著說說看');
+const scoreMsg = p => (p >= 90 ? '非常好！' : p >= 70 ? '不錯！再說清楚一點' : p >= 40 ? '有進步空間，再試一次' : '再聽一次，跟著說說看');
 function speakRepeat() {
   const list = sample(GEPT.repeat, 6);
   let i = 0;
   draw();
   function draw() {
     if (i >= list.length) {
-      view(`${bar('🔁 口說・複誦')}<div class="card result"><h2>🎉 完成 ${list.length} 句複誦！</h2><div class="row center"><button class="btn primary" data-again>🔁 再練一次</button><button class="btn" data-menu>⬅ 回英檢</button></div></div>`, geptHome);
+      view(`${bar('口說・複誦')}<div class="card result"><h2>完成 ${list.length} 句複誦！</h2><div class="row center"><button class="btn primary" data-again>再練一次</button><button class="btn" data-menu>← 回英檢</button></div></div>`, geptHome);
       $('[data-again]').onclick = speakRepeat; $('[data-menu]').onclick = geptHome;
       return;
     }
     const s = list[i];
-    view(`${bar('🔁 口說・複誦')}
+    view(`${bar('口說・複誦')}
       <div class="progress"><div style="width:${(i / list.length) * 100}%"></div></div>
       <div class="card qcard">
-        <p class="ask">🎧 第 ${i + 1} / ${list.length} 句：仔細聽，然後按 🎤 把句子<b>完整說一次</b><br><small>（正式考試時句子只唸給你聽，不會顯示）</small></p>
+        <p class="ask">第 ${i + 1} / ${list.length} 句：仔細聽，然後按 <i class="ic ic-mic"></i> 把句子<b>完整說一次</b><br><small>（正式考試時句子只唸給你聽，不會顯示）</small></p>
         ${sayBtns(s)}
-        <div class="row center"><button class="btn primary big" data-mic>🎤 開始說</button></div>
+        <div class="row center"><button class="btn primary big" data-mic><i class="ic ic-mic"></i> 開始說</button></div>
         <div class="said"></div>
-        <details class="sample"><summary>👀 看句子</summary><p><b>${esc(s)}</b></p></details>
+        <details class="sample"><summary>看句子</summary><p><b>${esc(s)}</b></p></details>
         ${SR ? '' : '<p class="note-s">這個瀏覽器不能語音辨識，可以自己大聲說完後，打開「看句子」對照。</p>'}
-        <div class="row center"><button class="btn" data-next>下一句 ➡</button></div>
+        <div class="row center"><button class="btn" data-next>下一句 →</button></div>
       </div>`, geptHome);
     setTimeout(() => speak(s), 400);
     $('[data-mic]').onclick = e => recognize(e.currentTarget, t => {
@@ -1438,14 +1439,14 @@ function speakRepeat() {
 /* ---------- 口說：朗讀 ---------- */
 function speakRead(idx) {
   const p = GEPT.readAloud[idx % GEPT.readAloud.length];
-  view(`${bar('📢 口說・朗讀')}
+  view(`${bar('口說・朗讀')}
     <div class="card qcard">
-      <p class="ask">📢 先默念一遍，準備好後按 🎤，把短文<b>清楚、大聲</b>唸出來，唸完再按一次結束</p>
+      <p class="ask">先默念一遍，準備好後按 <i class="ic ic-mic"></i>，把短文<b>清楚、大聲</b>唸出來，唸完再按一次結束</p>
       <div class="passage read"><h4>${esc(p.title)}</h4><div class="rtext">${p.text.split(/\s+/).map(w => `<span>${esc(w)}</span>`).join(' ')}</div></div>
-      <div class="row center"><button class="btn" data-say="${esc(p.text)}">🔊 聽示範</button><button class="btn" data-say="${esc(p.text)}" data-slow="1">🐢 慢速示範</button><button class="btn primary big" data-mic>🎤 開始朗讀</button></div>
+      <div class="row center"><button class="btn" data-say="${esc(p.text)}"><i class="ic ic-say"></i> 聽示範</button><button class="btn" data-say="${esc(p.text)}" data-slow="1">慢速示範</button><button class="btn primary big" data-mic><i class="ic ic-mic"></i> 開始朗讀</button></div>
       <div class="said"></div>
-      <div class="row center"><button class="btn ghost" data-next>➡ 換一篇</button></div>
-      <p class="note-s">💡 朗讀重點：發音清楚、速度穩定、句號要停頓、問句語調要上揚。</p>
+      <div class="row center"><button class="btn ghost" data-next>換一篇 →</button></div>
+      <p class="note-s">朗讀重點：發音清楚、速度穩定、句號要停頓、問句語調要上揚。</p>
     </div>`, geptHome);
   $('[data-mic]').onclick = e => recognize(e.currentTarget, t => {
     const said = new Set(norm(t).split(' '));
@@ -1455,7 +1456,7 @@ function speakRead(idx) {
     const pct = Math.round((hit / spans.length) * 100);
     $('.said').innerHTML = `<b class="${pct >= 70 ? 'g' : 'r'}">${pct} 分</b> ${scoreMsg(pct)}<br><small>綠色＝有唸到，紅色＝電腦沒聽到，可以多練習這些字</small>`;
     sfx(pct >= 70);
-  }, { continuous: true, recText: '⏹ 唸完了，按這裡結束' });
+  }, { continuous: true, recText: '<i class="ic ic-stop"></i> 唸完了，按這裡結束' });
   $('[data-next]').onclick = () => speakRead(idx + 1);
 }
 
@@ -1466,23 +1467,23 @@ function speakAnswer() {
   draw();
   function draw() {
     if (i >= list.length) {
-      view(`${bar('🙋 口說・回答問題')}<div class="card result"><h2>🎉 完成 ${list.length} 題！</h2><p>多練習用「完整句子」回答，再多說一個理由或細節，分數會更高喔！</p><div class="row center"><button class="btn primary" data-again>🔁 再練一次</button><button class="btn" data-menu>⬅ 回英檢</button></div></div>`, geptHome);
+      view(`${bar('口說・回答問題')}<div class="card result"><h2>完成 ${list.length} 題！</h2><p>多練習用「完整句子」回答，再多說一個理由或細節，分數會更高喔！</p><div class="row center"><button class="btn primary" data-again>再練一次</button><button class="btn" data-menu>← 回英檢</button></div></div>`, geptHome);
       $('[data-again]').onclick = speakAnswer; $('[data-menu]').onclick = geptHome;
       return;
     }
     const q = list[i];
     let left = 15, tm = null;
-    view(`${bar('🙋 口說・回答問題')}
+    view(`${bar('口說・回答問題')}
       <div class="progress"><div style="width:${(i / list.length) * 100}%"></div></div>
       <div class="card qcard">
         <p class="ask">第 ${i + 1} / ${list.length} 題：聽問題，在 15 秒內用英文回答</p>
-        <div class="say-row"><button class="say-big wide" data-say="${esc(q.q)}">🔊 再聽一次</button></div>
-        <details class="sample"><summary>👀 看題目</summary><p><b>${esc(q.q)}</b><br><small>${esc(q.zh)}</small></p></details>
+        <div class="say-row"><button class="say-big wide" data-say="${esc(q.q)}"><i class="ic ic-say"></i> 再聽一次</button></div>
+        <details class="sample"><summary>看題目</summary><p><b>${esc(q.q)}</b><br><small>${esc(q.zh)}</small></p></details>
         <div class="countdown"><div class="cd-bar"><div></div></div><span>15</span></div>
-        <div class="row center"><button class="btn primary big" data-mic>🎤 開始回答</button></div>
+        <div class="row center"><button class="btn primary big" data-mic><i class="ic ic-mic"></i> 開始回答</button></div>
         <div class="type-alt"><input class="type-in" placeholder="說的話會出現在這裡（也可以直接打字）" autocomplete="off"><button class="btn primary" data-type>送出</button></div>
         <div class="said"></div>
-        <div class="row center"><button class="btn" data-next>下一題 ➡</button></div>
+        <div class="row center"><button class="btn" data-next>下一題 →</button></div>
       </div>`, geptHome);
     let alive = true;
     const startTimer = () => {
@@ -1505,11 +1506,11 @@ function speakAnswer() {
       tips.push(n >= 6 ? { ok: true, msg: `說了 ${n} 個字，很完整` } : { ok: false, msg: `只說了 ${n} 個字，試著說成完整的句子（6 個字以上）` });
       if (/\bbecause\b|\bso\b|\band\b/i.test(t)) tips.push({ ok: true, msg: '有用連接詞，回答更豐富' });
       else tips.push({ ok: false, msg: '可以加上 because / and 說出理由或細節' });
-      $('.said').innerHTML = `你的回答：「${esc(t)}」${checkListHtml(tips)}<div class="samples"><b>💡 參考回答：</b>${q.samples.map(s => `<div>${esc(s)} <button class="mini" data-say="${esc(s)}">🔊</button></div>`).join('')}</div>`;
+      $('.said').innerHTML = `你的回答：「${esc(t)}」${checkListHtml(tips)}<div class="samples"><b>參考回答：</b>${q.samples.map(s => `<div>${esc(s)} <button class="mini" data-say="${esc(s)}"><i class="ic ic-say"></i></button></div>`).join('')}</div>`;
       $('.sample').open = true;
     };
     const ti = $('.type-alt input');
-    $('[data-mic]').onclick = e => micToInput(e.currentTarget, ti, { continuous: true, recText: '⏹ 說完了，按這裡' });
+    $('[data-mic]').onclick = e => micToInput(e.currentTarget, ti, { continuous: true, recText: '<i class="ic ic-stop"></i> 說完了，按這裡' });
     $('[data-type]').onclick = () => { if (ti.value.trim()) judge(ti.value.trim()); };
     ti.onkeydown = e => { if (e.key === 'Enter') $('[data-type]').click(); };
     $('[data-next]').onclick = () => { i++; draw(); };
