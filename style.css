@@ -454,3 +454,9 @@ input.listening { border-color: var(--bad) !important; background: #fff5f5; anim
 .dots i:nth-child(2) { animation-delay: .2s; }
 .dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes blink { 50% { opacity: .2; transform: translateY(-3px); } }
+
+/* ---------- 高清語音設定 ---------- */
+.hd-box { background: #f3f0ff; border-radius: 14px; padding: 12px 14px; margin: 8px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.hd-box b { color: #5f3dc4; }
+.hd-box small { color: var(--muted); }
+.hd-state .g, .hd-state .r { font-weight: 700; }

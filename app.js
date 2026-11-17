@@ -101,6 +101,45 @@ function stopSpeech() {
   try { audioEl.pause(); } catch (e) { }
   if (TTS) speechSynthesis.cancel();
 }
+/* ---------- 高清標準語音：Kokoro 在瀏覽器裡即時合成（美式發音，每台電腦聽起來都一樣） ----------
+   第一次開啟要下載約 90 MB 模型，之後存在瀏覽器裡。沒開或還沒載好時用瀏覽器內建語音。 */
+const KOKORO_URL = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js';
+const HD = { tts: null, loading: null, cache: new Map(), pct: 0 };
+const hdReady = () => voicePref().hd && HD.tts;
+function setHD(on) { const p = store.get('voice', { name: '', rate: 1 }); p.hd = on; store.set('voice', p); }
+function loadHD(onProgress) {
+  if (HD.tts) return Promise.resolve(HD.tts);
+  if (HD.loading) return HD.loading;
+  const files = {};
+  HD.loading = (async () => {
+    const { KokoroTTS } = await import(KOKORO_URL);
+    HD.tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
+      dtype: 'q8', device: 'wasm',
+      progress_callback: r => {
+        if (r.status !== 'progress' || !r.total) return;
+        files[r.file] = [r.loaded, r.total];
+        const v = Object.values(files), got = v.reduce((s, x) => s + x[0], 0), all = v.reduce((s, x) => s + x[1], 0);
+        HD.pct = Math.round((got / all) * 100);
+        onProgress && onProgress(HD.pct);
+      },
+    });
+    return HD.tts;
+  })();
+  HD.loading.catch(() => { }).finally(() => { HD.loading = null; });
+  return HD.loading;
+}
+function hdAudio(text, who) {
+  const key = (who === 'W' ? 'f|' : 'm|') + text;
+  if (!HD.cache.has(key)) {
+    const p = HD.tts.generate(text, { voice: who === 'W' ? 'af_heart' : 'am_michael', speed: 0.95 })
+      .then(a => URL.createObjectURL(a.toBlob()));
+    p.catch(() => HD.cache.delete(key));
+    HD.cache.set(key, p);
+    if (HD.cache.size > 300) HD.cache.delete(HD.cache.keys().next().value);
+  }
+  return HD.cache.get(key);
+}
+
 function playNext() {
   const gen = speechGen;
   const p = speechQ.shift();
@@ -108,29 +147,41 @@ function playNext() {
   speaking = true;
   const next = () => { if (gen === speechGen) playNext(); };
   if (typeof p === 'function') { try { p(); } catch (e) { } return next(); }
-  if (p.url) {
-    audioEl.src = p.url;
-    audioEl.playbackRate = Math.max(0.5, (p.rate / 0.85) * (voicePref().rate || 1));
+  const playUrl = (url, base, fallback) => {
+    audioEl.src = url;
+    audioEl.playbackRate = Math.max(0.5, ((p.rate || 0.85) / base) * (voicePref().rate || 1));
     audioEl.onended = next;
-    audioEl.onerror = () => { if (gen !== speechGen) return; speechQ.unshift({ tts: p.text || '', rate: p.rate, who: p.who }); next(); };
-    audioEl.play().catch(() => next());
+    audioEl.onerror = () => { if (gen === speechGen) fallback(); };
+    audioEl.play().catch(() => { if (gen === speechGen) fallback(); });
+  };
+  const browserTTS = () => {
+    if (!TTS || !p.tts) return next();
+    // 單一個字後面加句點，語音才會完整、清楚地念出來
+    const u = new SpeechSynthesisUtterance(/^[A-Za-z'-]+$/.test(p.tts) ? p.tts + '.' : p.tts);
+    u.lang = 'en-US';
+    u.rate = (p.rate || 0.85) * (voicePref().rate || 1);
+    const v = p.who === 'W' ? VOICE.f : VOICE.m;
+    if (v) u.voice = v;
+    if (p.who === 'W' && VOICE.f === VOICE.m) u.pitch = 1.3;
+    u.onend = next; u.onerror = next;
+    speechSynthesis.speak(u);
+  };
+  if (p.url) return playUrl(p.url, 0.85, () => { speechQ.unshift({ tts: p.text || '', rate: p.rate, who: p.who }); next(); });
+  if (!p.tts) return next();
+  if (hdReady()) {
+    hdAudio(p.tts, p.who)
+      .then(url => { if (gen === speechGen) playUrl(url, 0.85, browserTTS); })
+      .catch(() => { if (gen === speechGen) browserTTS(); });
     return;
   }
-  if (!TTS || !p.tts) return next();
-  // 單一個字後面加句點，語音才會完整、清楚地念出來
-  const u = new SpeechSynthesisUtterance(/^[A-Za-z'-]+$/.test(p.tts) ? p.tts + '.' : p.tts);
-  u.lang = 'en-US';
-  u.rate = (p.rate || 0.85) * (voicePref().rate || 1);
-  const v = p.who === 'W' ? VOICE.f : VOICE.m;
-  if (v) u.voice = v;
-  if (p.who === 'W' && VOICE.f === VOICE.m) u.pitch = 1.3;
-  u.onend = next; u.onerror = next;
-  speechSynthesis.speak(u);
+  browserTTS();
 }
 /** 依序念出多段文字。queue=true 時接在目前正在念的後面 */
 function speakSeq(items, onEnd, queue) {
   if (!queue) stopSpeech();
-  items.forEach(it => speechQ.push(...toParts(it)));
+  const parts = items.flatMap(it => toParts(it));
+  if (hdReady()) parts.forEach(p => { if (p.tts) hdAudio(p.tts, p.who); });   // 先在背景合成，念起來不會卡
+  speechQ.push(...parts);
   if (onEnd) speechQ.push(onEnd);
   if (!speaking) setTimeout(playNext, queue ? 0 : 60);
 }
@@ -140,23 +191,54 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-say]');
   if (b) speak(b.dataset.say, b.dataset.slow ? 0.55 : 0.85);
 });
+// 之前開過高清語音：開網頁時在背景自動載入（從瀏覽器快取，很快）
+if (voicePref().hd) setTimeout(() => loadHD().catch(() => { }), 1500);
 
 /** 語音設定視窗 */
 function voiceSettings() {
   const vs = englishVoices();
   const pref = voicePref();
-  const nClips = Object.keys(CLIPS).length;
   const d = document.createElement('div');
   d.className = 'modal';
   d.innerHTML = `<div class="modal-card">
     <h3><i class="ic ic-say"></i> 語音設定</h3>
-    <p class="note-s">${nClips ? `已載入 <b>${nClips}</b> 段高清男聲錄音，題目會優先使用錄音。` : '目前沒有高清錄音檔，使用瀏覽器內建語音。'}<br>沒有錄音的句子會用下面選的聲音。用 <b>Edge 瀏覽器</b>可以選到微軟的自然語音（例如 Andrew、Guy），聲音最好聽。</p>
-    <label>聲音：<select data-v>${vs.map(v => `<option value="${esc(v.name)}" ${VOICE.m && v.name === VOICE.m.name ? 'selected' : ''}>${esc(v.name)}${isMulti(v) ? "（多語言，單字可能念錯）" : ""}</option>`).join('') || '<option>（這個瀏覽器沒有英文語音）</option>'}</select></label>
+    <div class="hd-box">
+      <b>高清標準美式男聲（推薦）</b>
+      <small>用 AI 語音模型在電腦上合成，發音標準清楚，每個瀏覽器聽起來都一樣。第一次要下載約 90 MB，之後會記住。</small>
+      <div class="hd-state"></div>
+    </div>
+    <p class="note-s">沒開高清語音時，會用下面選的瀏覽器聲音。</p>
+    <label>瀏覽器聲音：<select data-v>${vs.map(v => `<option value="${esc(v.name)}" ${VOICE.m && v.name === VOICE.m.name ? 'selected' : ''}>${esc(v.name)}${isMulti(v) ? '（多語言，單字可能念錯）' : ''}</option>`).join('') || '<option>（這個瀏覽器沒有英文語音）</option>'}</select></label>
     <label>速度：<select data-r>${[[0.8, '慢一點'], [1, '正常'], [1.15, '快一點']].map(([r, t]) => `<option value="${r}" ${+pref.rate === r ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <div class="row center"><button class="btn" data-test>試聽</button><button class="btn primary" data-ok>完成</button></div>
   </div>`;
   document.body.appendChild(d);
-  const save = () => { store.set('voice', { name: $('[data-v]', d).value, rate: +$('[data-r]', d).value, sure: true }); pickVoices(); };
+  const st = $('.hd-state', d);
+  const drawHD = () => {
+    if (!d.isConnected) return;
+    if (voicePref().hd && HD.tts) st.innerHTML = '<span class="g">已開啟</span> <button class="mini" data-hdoff>改回瀏覽器聲音</button>';
+    else if (HD.loading) st.innerHTML = `<div class="ai-bar"><div style="width:${HD.pct}%"></div></div><small>下載中 ${HD.pct}%…</small>`;
+    else st.innerHTML = '<button class="btn primary" data-hdon>開啟高清語音</button>';
+    const on = $('[data-hdon]', st), off = $('[data-hdoff]', st);
+    if (on) on.onclick = () => {
+      setHD(true);
+      loadHD(() => drawHD()).then(() => { drawHD(); speakSeq([{ text: 'Hello! I am Robo. My voice is clear now.' }]); })
+        .catch(e => { setHD(false); st.innerHTML = `<span class="r">載入失敗：${esc(e.message || e)}</span>`; });
+      drawHD();
+    };
+    if (off) off.onclick = () => { setHD(false); drawHD(); };
+  };
+  drawHD();
+  let wasLoading = !!HD.loading;
+  const iv = setInterval(() => {
+    if (!d.isConnected) return clearInterval(iv);
+    if (HD.loading || wasLoading) { drawHD(); wasLoading = !!HD.loading; }
+  }, 700);
+  const save = () => {
+    const old = store.get('voice', {});
+    store.set('voice', { ...old, name: $('[data-v]', d).value, rate: +$('[data-r]', d).value, sure: true });
+    pickVoices();
+  };
   $('[data-v]', d).onchange = save; $('[data-r]', d).onchange = save;
   $('[data-test]', d).onclick = () => { save(); speakSeq([{ text: 'Hello! I am Robo. Let us learn English together.' }]); };
   $('[data-ok]', d).onclick = () => { save(); d.remove(); };
@@ -1301,7 +1383,8 @@ function freeChat(back) {
   const drawPanel = (state, extra = '') => {
     if (state === 'on') {
       panel.className = 'ai-panel on';
-      panel.innerHTML = `<b>AI 大腦已開啟</b>Robo 會依照你說的話回答你（${esc(AI_MODELS.find(m => m.id === AI.model)?.name || '')}）`;
+      panel.innerHTML = `<b>AI 大腦已開啟</b>Robo 會依照你說的話回答你（${esc(AI_MODELS.find(m => m.id === AI.model)?.name || '')}）
+        <small>${hdReady() ? '聲音：高清標準美式發音' : HD.loading ? `高清聲音下載中 ${HD.pct}%…（先用瀏覽器聲音）` : '聲音：瀏覽器內建（可到右上角「語音設定」開啟高清語音）'}</small>`;
     } else if (state === 'loading') {
       panel.className = 'ai-panel';
       panel.innerHTML = `<b>正在啟動 AI 大腦…</b><div class="ai-bar"><div style="width:${extra.pct || 0}%"></div></div><small>${esc(extra.text || '')}</small><small>第一次要下載模型，請保持網路連線；下載完會存在電腦裡，下次就很快。</small>`;
@@ -1320,6 +1403,9 @@ function freeChat(back) {
   };
   const start = async base => {
     drawPanel('loading', { pct: 0, text: '' });
+    // AI 的聲音也換成高清標準美式（和 AI 大腦同時下載）
+    setHD(true);
+    loadHD().then(() => { if (alive && ready()) drawPanel('on'); }).catch(() => setHD(false));
     try {
       await loadAI(base, r => { if (alive) drawPanel('loading', { pct: Math.round((r.progress || 0) * 100), text: r.text }); });
       store.set('ai', { model: base, auto: true });
