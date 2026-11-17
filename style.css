@@ -645,3 +645,20 @@ body {
 .share-box small { color: var(--muted); }
 .school-empty { background: var(--yellow-l); border-radius: 12px; padding: 10px 14px; }
 @media (max-width: 640px) { .bank { flex-wrap: wrap; } }
+
+/* ---------- 科目選單 ---------- */
+.subj-hero h1 span { display: block; font-size: .55em; margin-top: 6px; }
+.subjects { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin: 6px 0 10px; }
+.subj {
+  border: 3px solid color-mix(in srgb, var(--c) 45%, #fff); border-radius: 22px; background: color-mix(in srgb, var(--c) 12%, #fff);
+  padding: 18px 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; box-shadow: 0 5px 0 color-mix(in srgb, var(--c) 45%, #fff);
+  transition: transform .15s;
+}
+.subj:hover { transform: translateY(-4px) rotate(-1deg); }
+.subj-mark { width: 74px; height: 74px; border-radius: 50%; background: var(--c); color: #fff; font-size: 38px; font-weight: 900; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans TC', sans-serif; box-shadow: 0 4px 0 color-mix(in srgb, var(--c) 70%, #000); }
+.subj b { font-size: 24px; color: color-mix(in srgb, var(--c) 75%, #000); }
+.subj small { color: var(--muted); font-size: 13px; text-align: center; }
+.to-subj { margin: 4px 0 0; }
+.mcq-q { font-size: 22px; font-weight: 700; margin: 4px 0 14px; line-height: 1.6; text-align: left; }
+@media (max-width: 640px) { .subjects { grid-template-columns: repeat(2, 1fr); } .mcq-q { font-size: 19px; } }
+.bank-form select { display: block; width: 100%; margin-top: 4px; padding: 8px 12px; border: 3px solid var(--line); border-radius: 12px; font: inherit; font-weight: 500; background: #fff; }
