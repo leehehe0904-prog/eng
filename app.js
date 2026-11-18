@@ -2435,8 +2435,9 @@ Q.mcq = {
   label: '選擇題',
   render(el, q, done) {
     const it = q.item;
-    el.innerHTML = `<div class="mcq-q">${esc(it.q).replace(/\n/g, '<br>')}</div>${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
+    el.innerHTML = `<div class="mcq-q">${esc(it.q).replace(/\n/g, '<br>')}</div>${it.hints && it.hints.length ? '<div class="hl"></div>' : ''}${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
     bindOpts(el, it.a, done, { head: '正確答案：', en: it.opts[it.a], zh: it.ex ? '解析：' + it.ex : '', say: false });
+    if (it.hints && it.hints.length) hintLadder(el, it.hints.map(h => () => esc(h)));   // 數學：一步一步的解題提示
     if (q.pad) scratchPad(el);   // 數學：底下有計算紙
     if (it.demo) {                // 程式：底下有教學影片（程式一步一步執行）
       const d = document.createElement('details');
@@ -2509,7 +2510,9 @@ function subjectQuestions(subj, lvl, n = 10) {
       if (!g || seen.has(g.q)) continue;
       seen.add(g.q);
       const m = x => String(x).replace(/-(?=\d)/g, '−');   // 負號用數學的「−」
-      out.push({ ...mkMcq(g.q, m(g.ans), g.wrong.map(m), g.ex), pad: true });
+      const mq = mkMcq(g.q, m(g.ans), g.wrong.map(m), g.ex);
+      mq.item.hints = g.h;
+      out.push({ ...mq, pad: true });
     }
     return out;
   }
