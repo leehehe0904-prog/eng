@@ -612,9 +612,16 @@ function lruPick(list, keyOf) {
   SEEN[keyOf(c)] = ++seenTick;
   return c;
 }
-const saveSeen = () => { store.set('seen', SEEN); store.set('seenTick', seenTick); };
+const saveSeen = () => {
+  // 紀錄太多時，只留最近的 6000 筆，避免瀏覽器儲存空間爆掉
+  const ks = Object.keys(SEEN);
+  if (ks.length > 8000) ks.sort((a, b) => SEEN[a] - SEEN[b]).slice(0, ks.length - 6000).forEach(k => delete SEEN[k]);
+  store.set('seen', SEEN); store.set('seenTick', seenTick);
+};
+/** 把整題內容變成短短的代號（題目很長、開頭很像的題目也不會被當成同一題） */
+const hashKey = s => { let h1 = 5381, h2 = 2166136261; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1, 33) ^ c; h2 = Math.imul(h2 ^ c, 16777619); } return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36); };
 function lruSample(list, n, ns) {
-  const keyOf = it => ns + ':' + (typeof it === 'string' ? it : JSON.stringify(it).slice(0, 120));
+  const keyOf = it => ns + ':' + (typeof it === 'string' ? it : hashKey(JSON.stringify(it)));
   const out = [], rest = list.slice();
   while (out.length < n && rest.length) { const c = lruPick(rest, keyOf); out.push(c); rest.splice(rest.indexOf(c), 1); }
   saveSeen();
@@ -2509,9 +2516,12 @@ function scratchPad(host) {
 const mkMcq = (q, ans, wrong, ex) => { const opts = shuffle([ans, ...wrong.filter(Boolean)]); return { type: 'mcq', item: { q, opts, a: opts.indexOf(ans), ex } }; };
 function subjectQuestions(subj, lvl, n = 10) {
   if (subj === 'math') {
+    // 題型輪流出（打亂順序），上次少出的題型這次優先，數字每次都隨機
     const seen = new Set(), out = [];
+    const cnt = MathGen.count(lvl), key = `math-${lvl}`, last = store.get('mathTypes', {})[key] || [];
+    const order = shuffle([...Array(cnt).keys()]).sort((x, y) => last.includes(x) - last.includes(y));
     for (let t = 0; t < 80 && out.length < n; t++) {
-      const g = MathGen.one(lvl);
+      const g = MathGen.one(lvl, order[t % cnt]);
       if (!g || seen.has(g.q)) continue;
       seen.add(g.q);
       const m = x => String(x).replace(/-(?=\d)/g, '−');   // 負號用數學的「−」
@@ -2519,6 +2529,7 @@ function subjectQuestions(subj, lvl, n = 10) {
       mq.item.hints = g.h;
       out.push({ ...mq, pad: true });
     }
+    store.set('mathTypes', { ...store.get('mathTypes', {}), [key]: order.slice(0, Math.min(n, cnt)) });
     return out;
   }
   return lruSample(MCQ[subj][lvl], n, `${subj}-${lvl}`).map(item => {
