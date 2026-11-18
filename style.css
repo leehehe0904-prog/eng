@@ -776,3 +776,23 @@ details.demo[open] > summary { border-bottom: 1px solid #c3fae8; }
 .st-voice { font-size: 14px; display: flex; align-items: center; gap: 4px; }
 .st-err { margin-top: 8px; color: #c92a2a; font-weight: 700; }
 @media (max-width: 640px) { .st-screen { grid-template-columns: 1fr; } }
+
+/* ---------- 寫生字：筆順步驟圖 ---------- */
+.hz-box { gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.hz-order { flex: 1; min-width: 220px; max-width: 420px; background: #fff; border: 2px solid #fcc2d7; border-radius: 12px; padding: 8px; text-align: left; }
+.hz-order-h { font-weight: 800; color: #c2255c; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hz-total { color: var(--muted); font-weight: 600; font-size: 14px; }
+.hz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; }
+.hz-cell { position: relative; border: 2px solid #f1f3f5; border-radius: 8px; padding: 3px 3px 16px; background: #fffdfd; transition: transform .15s, border-color .15s; }
+.hz-cell svg { display: block; width: 100%; height: auto; }
+.hz-cell b { position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 13px; color: #868e96; }
+.hz-cell.done { opacity: .85; }
+.hz-cell.on { border-color: #e8590c; background: #fff4e6; transform: scale(1.06); opacity: 1; }
+.hz-cell.on b { color: #e8590c; font-size: 15px; }
+.hz-cell.bad { border-color: #e03131; background: #ffe3e3; animation: shake .4s; }
+.hz-grid.blur svg { opacity: .07; }
+.hz-steps { flex-wrap: wrap; }
+.hz-rounds { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; font-weight: 700; min-height: 4px; }
+.hz-rounds span { background: #f8f9fa; border-radius: 99px; padding: 2px 12px; }
+.hz-grid .dim { color: var(--muted); font-size: 14px; }
+@media (max-width: 640px) { .hz-order { max-width: none; } .hz-grid { max-height: 190px; } }

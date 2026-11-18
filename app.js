@@ -2593,14 +2593,23 @@ Q.hanzi = {
     const rev = { head: '這個字是：', en: `${ch}（${zy}）${word}`, say: false };
     el.innerHTML = `<p class="ask">寫出這個字：<span class="zy">${esc(zy)}</span></p>
       <div class="hz-word">${esc(blankWord(word, ch))} <button class="mini" data-zh>念給我聽</button></div>
-      <div class="hz-steps"><span data-st="1">1 看筆順</span><span data-st="2">2 描紅</span><span data-st="3">3 默寫</span></div>
-      <div class="hz-box"><div class="hz-pad"></div></div>
+      <div class="hz-steps"><span data-st="1">1 看筆順</span><span data-st="2">2 描紅</span><span data-st="3">3 默寫第一遍</span><span data-st="4">4 默寫第二遍</span></div>
+      <div class="hz-box">
+        <div class="hz-pad"></div>
+        <div class="hz-order">
+          <div class="hz-order-h">筆順步驟 <span class="hz-total"></span> <button class="mini" data-peek hidden>看筆順提示</button></div>
+          <div class="hz-grid"><span class="dim">載入中…</span></div>
+        </div>
+      </div>
       <div class="hz-msg"></div>
+      <div class="hz-rounds"></div>
       <div class="row center"><button class="btn" data-replay>再看一次筆順</button><button class="btn primary" data-go>開始描紅</button><button class="btn ghost" data-skip>略過這個字</button></div>`;
     $('[data-zh]', el).onclick = () => speakZh(`${ch}，${word}的${ch}`);
     const pad = $('.hz-pad', el), msg = $('.hz-msg', el), go = $('[data-go]', el), replay = $('[data-replay]', el);
-    let writer = null, step = 1, over = false;
-    const setStep = n => { step = n; $$('[data-st]', el).forEach(s => s.classList.toggle('on', +s.dataset.st === n)); };
+    const grid = $('.hz-grid', el), peek = $('[data-peek]', el), rounds = $('.hz-rounds', el);
+    let writer = null, step = 1, over = false, n = 0, gen = 0;
+    const mistakes = [];
+    const setStep = s => { step = s; $$('[data-st]', el).forEach(x => x.classList.toggle('on', +x.dataset.st === s)); };
     const size = Math.min(280, Math.max(220, window.innerWidth - 120));
     const make = outline => {
       pad.innerHTML = '';
@@ -2611,39 +2620,100 @@ Q.hanzi = {
       });
       return writer;
     };
-    const finish = ok => { if (over) return; over = true; go.disabled = replay.disabled = true; $('[data-skip]', el).disabled = true; done(ok, rev); };
-    const animate = () => { setStep(1); make(true); msg.textContent = '仔細看每一筆的順序…'; writer.animateCharacter({ onComplete: () => { if (step === 1) msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。'; } }); };
+    // 筆順步驟圖：第 k 格畫出前 k 筆，第 k 筆用橘色
+    const buildGrid = data => {
+      n = data.strokes.length;
+      $('.hz-total', el).textContent = `（共 ${n} 筆）`;
+      grid.innerHTML = data.strokes.map((_, k) => `<div class="hz-cell"><svg viewBox="0 0 1024 1024"><g transform="translate(0, 900) scale(1, -1)">${
+        data.strokes.map((p, j) => `<path d="${p}" fill="${j < k ? '#495057' : j === k ? '#e8590c' : '#e9ecef'}"/>`).join('')}</g></svg><b>${k + 1}</b></div>`).join('');
+    };
+    const mark = k => {   // k：正在寫第幾筆（從 0 開始）；k = n 代表寫完
+      [...grid.children].forEach((c, i) => { c.classList.toggle('on', i === k); c.classList.toggle('done', i < k); });
+      const c = grid.children[Math.min(k, n - 1)];
+      if (c && c.scrollIntoView) { const g = grid.getBoundingClientRect(), r = c.getBoundingClientRect(); if (r.top < g.top || r.bottom > g.bottom) grid.scrollTop += r.top - g.top - 10; }
+    };
+    const markBad = k => { const c = grid.children[k]; if (c) { c.classList.add('bad'); setTimeout(() => c.classList.remove('bad'), 800); } };
+    const finish = ok => {
+      if (over) return; over = true;
+      go.disabled = replay.disabled = true; $('[data-skip]', el).disabled = true;
+      grid.classList.remove('blur'); peek.hidden = true; mark(n);
+      done(ok, rev);
+    };
+    // 一筆一筆播放筆順，旁邊的數字同步亮起
+    const animate = then => {
+      setStep(1); make(true); grid.classList.remove('blur'); peek.hidden = true;
+      const my = ++gen;
+      msg.textContent = '仔細看每一筆的順序，旁邊的數字會跟著亮起來';
+      writer.hideCharacter();
+      let k = 0;
+      const nextStroke = () => {
+        if (my !== gen || !el.isConnected) return;
+        if (k >= n) {
+          mark(n);
+          if (then) setTimeout(then, 600);
+          else msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。';
+          return;
+        }
+        mark(k);
+        writer.animateStroke(k, { onComplete: () => { k++; setTimeout(nextStroke, 300); } });
+      };
+      nextStroke();
+    };
     const trace = () => {
-      setStep(2); make(true); msg.textContent = '照著淡淡的字，一筆一筆寫（順序要對）';
-      go.textContent = '跳到默寫'; go.onclick = memory;
+      ++gen; setStep(2); make(true); grid.classList.remove('blur'); peek.hidden = true; mark(0);
+      msg.textContent = '照著淡淡的字，看旁邊的筆順數字，一筆一筆寫';
+      go.textContent = '跳到默寫'; go.onclick = () => memory(1);
       writer.quiz({
-        onMistake: () => { msg.textContent = '這一筆不對喔，注意筆順和方向'; },
-        onCorrectStroke: d => { msg.textContent = `很好！還有 ${d.strokesRemaining} 筆`; },
-        onComplete: () => { sfx(true); msg.textContent = '描得很好！接下來不看字，自己寫寫看'; setTimeout(memory, 900); },
+        onMistake: d => { markBad(d.strokeNum); msg.textContent = `這一筆不對喔，現在要寫第 ${d.strokeNum + 1} 筆（看旁邊橘色的那一筆）`; },
+        onCorrectStroke: d => { mark(d.strokeNum + 1); msg.textContent = d.strokesRemaining ? `很好！接下來寫第 ${d.strokeNum + 2} 筆，還有 ${d.strokesRemaining} 筆` : '寫完了！'; },
+        onComplete: () => { sfx(true); msg.textContent = '描得很好！接下來不看字，默寫兩遍'; setTimeout(() => memory(1), 1000); },
       });
     };
-    const memory = () => {
-      setStep(3); make(false); msg.textContent = '不看字，自己寫出來！錯兩次會給提示';
-      go.textContent = '我寫不出來'; go.onclick = () => { msg.textContent = '沒關係，再看一次筆順，記住它'; finish(false); writer.animateCharacter(); };
+    // 默寫（第 round 遍）：筆順圖變淡，避免直接看到答案
+    const memory = round => {
+      ++gen; setStep(2 + round); make(false); mark(0);
+      grid.classList.add('blur'); peek.hidden = false; peek.textContent = '看筆順提示';
+      msg.textContent = `默寫第${round === 1 ? '一' : '二'}遍：不看字，自己寫出來！錯兩次會給提示`;
+      go.textContent = '我寫不出來';
+      go.onclick = () => { msg.textContent = '沒關係，再看一次筆順，把它記起來'; finish(false); animate(() => { }); };
       writer.quiz({
         showHintAfterMisses: 2,
-        onMistake: d => { msg.textContent = `這一筆不對（第 ${d.strokeNum + 1} 筆）`; },
-        onCorrectStroke: d => { msg.textContent = `對了！還有 ${d.strokesRemaining} 筆`; },
+        onMistake: d => { markBad(d.strokeNum); msg.textContent = `第 ${d.strokeNum + 1} 筆不對，再想想看`; },
+        onCorrectStroke: d => { mark(d.strokeNum + 1); msg.textContent = d.strokesRemaining ? `對了！還有 ${d.strokesRemaining} 筆` : '寫完了！'; },
         onComplete: s => {
-          const ok = s.totalMistakes <= 2;
-          msg.textContent = ok ? `寫對了！（錯了 ${s.totalMistakes} 筆）` : `完成了，不過錯了 ${s.totalMistakes} 筆，再多練習幾次`;
-          setTimeout(() => finish(ok), 700);
+          mistakes[round - 1] = s.totalMistakes;
+          rounds.innerHTML = mistakes.map((m, i) => `<span class="${m <= 2 ? 'g' : 'r'}">默寫第${i ? '二' : '一'}遍：${m ? `錯 ${m} 筆` : '全對'}</span>`).join('');
+          if (round === 1) {
+            sfx(s.totalMistakes <= 2);
+            msg.textContent = s.totalMistakes <= 2 ? '第一遍寫對了！再默寫第二遍，加深印象' : `第一遍錯了 ${s.totalMistakes} 筆，第二遍再仔細寫一次`;
+            setTimeout(() => memory(2), 1300);
+          } else {
+            const ok = mistakes.every(m => m <= 2);
+            msg.textContent = ok ? '兩遍都寫對了，太棒了！' : '完成了！錯比較多的筆畫要再多練習幾次';
+            setTimeout(() => finish(ok), 800);
+          }
         },
       });
     };
-    loadHanziWriter().then(() => {
-      animate();
-      go.onclick = trace;
-      replay.onclick = () => { if (!writer) return; const was = step; make(step !== 3); writer.animateCharacter({ onComplete: () => { if (was === 2) trace(); else if (was === 3) memory(); } }); };
-    }).catch(() => { msg.innerHTML = '<span class="r">筆順資料載入失敗，請確認有連上網路</span>'; });
+    peek.onclick = () => { const b = grid.classList.toggle('blur'); peek.textContent = b ? '看筆順提示' : '收起筆順提示'; };
+    loadHanziWriter()
+      .then(() => HanziWriter.loadCharacterData(ch))
+      .then(data => {
+        if (!el.isConnected) return;
+        buildGrid(data);
+        animate();
+        go.onclick = trace;
+        replay.onclick = () => {
+          if (!writer || over) return;
+          const was = step;
+          animate(() => { if (was === 2) trace(); else if (was === 3) memory(1); else if (was === 4) memory(2); else msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。'; });
+        };
+      })
+      .catch(() => { msg.innerHTML = '<span class="r">筆順資料載入失敗，請確認有連上網路</span>'; grid.innerHTML = ''; });
     $('[data-skip]', el).onclick = () => finish(false);
   },
 };
+
 function hanziQuiz(level, back, list, title, key) {
   const src = list || HANZI[level];
   const L = SUBJECT_LEVELS.find(l => l.id === level);
