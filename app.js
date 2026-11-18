@@ -2460,10 +2460,10 @@ function scratchPad(host) {
   const ERASER = 24;   // 橡皮擦大小（像素），準心圓圈也用這個大小
   const strokes = [];
   let cur = null, color = '#212529', eraser = false;
-  // 橡皮擦的準心：黑色小圓圈跟著滑鼠／手指移動
+  // 準心跟著滑鼠／手指移動：用筆時是黑色實心小圓點，用橡皮擦時是空心圓圈（大小＝擦掉的範圍）
   const moveRing = e => {
-    if (!eraser) { ring.style.display = 'none'; return; }
     const [x, y] = pos(e);
+    ring.classList.toggle('er', eraser);
     ring.style.display = 'block';
     ring.style.left = x + 'px'; ring.style.top = y + 'px';
   };
@@ -2492,8 +2492,7 @@ function scratchPad(host) {
   $$('.pen', w).forEach(b => b.onclick = () => {
     $$('.pen', w).forEach(x => x.classList.remove('on')); b.classList.add('on');
     eraser = b.hasAttribute('data-er'); if (!eraser) color = b.dataset.c;
-    cv.classList.toggle('erasing', eraser);
-    if (!eraser) ring.style.display = 'none';
+    ring.classList.toggle('er', eraser);
   });
   $('[data-undo]', w).onclick = () => { strokes.pop(); redraw(); };
   $('[data-clr]', w).onclick = () => { strokes.length = 0; redraw(); };
