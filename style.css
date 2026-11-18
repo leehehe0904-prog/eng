@@ -796,3 +796,9 @@ details.demo[open] > summary { border-bottom: 1px solid #c3fae8; }
 .hz-rounds span { background: #f8f9fa; border-radius: 99px; padding: 2px 12px; }
 .hz-grid .dim { color: var(--muted); font-size: 14px; }
 @media (max-width: 640px) { .hz-order { max-width: none; } .hz-grid { max-height: 190px; } }
+
+/* 計算紙：橡皮擦的準心（黑色小圓圈，大小和擦掉的範圍一樣） */
+.pad-area { position: relative; }
+.pad canvas.erasing { cursor: none; }
+.pad-eraser { display: none; position: absolute; left: 0; top: 0; width: 24px; height: 24px; border: 2px solid #000; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff, inset 0 0 0 1px rgba(255, 255, 255, .8); transform: translate(-50%, -50%); pointer-events: none; }

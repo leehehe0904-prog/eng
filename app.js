@@ -2454,15 +2454,23 @@ function scratchPad(host) {
   w.innerHTML = `<div class="pad-bar"><b>計算紙</b>
     <button class="mini pen on" data-c="#212529">黑筆</button><button class="mini pen" data-c="#e03131">紅筆</button><button class="mini pen" data-c="#1971c2">藍筆</button>
     <button class="mini pen" data-er>橡皮擦</button><button class="mini" data-undo>上一步</button><button class="mini" data-clr>全部擦掉</button></div>
-    <canvas></canvas>`;
+    <div class="pad-area"><canvas></canvas><div class="pad-eraser"></div></div>`;
   host.appendChild(w);
-  const cv = $('canvas', w), ctx = cv.getContext('2d');
+  const cv = $('canvas', w), ctx = cv.getContext('2d'), ring = $('.pad-eraser', w);
+  const ERASER = 24;   // 橡皮擦大小（像素），準心圓圈也用這個大小
   const strokes = [];
   let cur = null, color = '#212529', eraser = false;
+  // 橡皮擦的準心：黑色小圓圈跟著滑鼠／手指移動
+  const moveRing = e => {
+    if (!eraser) { ring.style.display = 'none'; return; }
+    const [x, y] = pos(e);
+    ring.style.display = 'block';
+    ring.style.left = x + 'px'; ring.style.top = y + 'px';
+  };
   const drawStroke = s => {
     ctx.save();
     ctx.globalCompositeOperation = s.er ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = s.c; ctx.lineWidth = s.er ? 24 : 3; ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.strokeStyle = s.c; ctx.lineWidth = s.er ? ERASER : 3; ctx.lineCap = ctx.lineJoin = 'round';
     ctx.beginPath();
     s.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     if (s.pts.length === 1) ctx.lineTo(s.pts[0][0] + 0.1, s.pts[0][1]);
@@ -2477,12 +2485,15 @@ function scratchPad(host) {
     redraw();
   };
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); cur = { c: color, er: eraser, pts: [pos(e)] }; strokes.push(cur); drawStroke(cur); };
-  cv.onpointermove = e => { if (!cur) return; cur.pts.push(pos(e)); redraw(); };
-  cv.onpointerup = cv.onpointercancel = () => { cur = null; };
+  cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); moveRing(e); cur = { c: color, er: eraser, pts: [pos(e)] }; strokes.push(cur); drawStroke(cur); };
+  cv.onpointermove = e => { moveRing(e); if (!cur) return; cur.pts.push(pos(e)); redraw(); };
+  cv.onpointerup = cv.onpointercancel = e => { cur = null; if (e.pointerType !== 'mouse') ring.style.display = 'none'; };
+  cv.onpointerleave = () => { if (!cur) ring.style.display = 'none'; };
   $$('.pen', w).forEach(b => b.onclick = () => {
     $$('.pen', w).forEach(x => x.classList.remove('on')); b.classList.add('on');
     eraser = b.hasAttribute('data-er'); if (!eraser) color = b.dataset.c;
+    cv.classList.toggle('erasing', eraser);
+    if (!eraser) ring.style.display = 'none';
   });
   $('[data-undo]', w).onclick = () => { strokes.pop(); redraw(); };
   $('[data-clr]', w).onclick = () => { strokes.length = 0; redraw(); };
