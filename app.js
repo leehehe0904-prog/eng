@@ -2597,7 +2597,7 @@ Q.hanzi = {
       <div class="hz-box">
         <div class="hz-pad"></div>
         <div class="hz-order">
-          <div class="hz-order-h">筆順步驟 <span class="hz-total"></span> <button class="mini" data-peek hidden>看筆順提示</button></div>
+          <div class="hz-order-h">筆順步驟 <span class="hz-total"></span></div>
           <div class="hz-grid"><span class="dim">載入中…</span></div>
         </div>
       </div>
@@ -2606,7 +2606,8 @@ Q.hanzi = {
       <div class="row center"><button class="btn" data-replay>再看一次筆順</button><button class="btn primary" data-go>開始描紅</button><button class="btn ghost" data-skip>略過這個字</button></div>`;
     $('[data-zh]', el).onclick = () => speakZh(`${ch}，${word}的${ch}`);
     const pad = $('.hz-pad', el), msg = $('.hz-msg', el), go = $('[data-go]', el), replay = $('[data-replay]', el);
-    const grid = $('.hz-grid', el), peek = $('[data-peek]', el), rounds = $('.hz-rounds', el);
+    const grid = $('.hz-grid', el), order = $('.hz-order', el), rounds = $('.hz-rounds', el);
+    const showOrder = on => { order.hidden = !on; };   // 默寫時不顯示筆順步驟
     let writer = null, step = 1, over = false, n = 0, gen = 0;
     const mistakes = [];
     const setStep = s => { step = s; $$('[data-st]', el).forEach(x => x.classList.toggle('on', +x.dataset.st === s)); };
@@ -2636,12 +2637,12 @@ Q.hanzi = {
     const finish = ok => {
       if (over) return; over = true;
       go.disabled = replay.disabled = true; $('[data-skip]', el).disabled = true;
-      grid.classList.remove('blur'); peek.hidden = true; mark(n);
+      showOrder(true); mark(n);
       done(ok, rev);
     };
     // 一筆一筆播放筆順，旁邊的數字同步亮起
     const animate = then => {
-      setStep(1); make(true); grid.classList.remove('blur'); peek.hidden = true;
+      setStep(1); make(true); showOrder(true);
       const my = ++gen;
       msg.textContent = '仔細看每一筆的順序，旁邊的數字會跟著亮起來';
       writer.hideCharacter();
@@ -2660,7 +2661,7 @@ Q.hanzi = {
       nextStroke();
     };
     const trace = () => {
-      ++gen; setStep(2); make(true); grid.classList.remove('blur'); peek.hidden = true; mark(0);
+      ++gen; setStep(2); make(true); showOrder(true); mark(0);
       msg.textContent = '照著淡淡的字，看旁邊的筆順數字，一筆一筆寫';
       go.textContent = '跳到默寫'; go.onclick = () => memory(1);
       writer.quiz({
@@ -2669,10 +2670,10 @@ Q.hanzi = {
         onComplete: () => { sfx(true); msg.textContent = '描得很好！接下來不看字，默寫兩遍'; setTimeout(() => memory(1), 1000); },
       });
     };
-    // 默寫（第 round 遍）：筆順圖變淡，避免直接看到答案
+    // 默寫（第 round 遍）：不顯示筆順步驟，完全靠自己記
     const memory = round => {
       ++gen; setStep(2 + round); make(false); mark(0);
-      grid.classList.add('blur'); peek.hidden = false; peek.textContent = '看筆順提示';
+      showOrder(false);
       msg.textContent = `默寫第${round === 1 ? '一' : '二'}遍：不看字，自己寫出來！錯兩次會給提示`;
       go.textContent = '我寫不出來';
       go.onclick = () => { msg.textContent = '沒關係，再看一次筆順，把它記起來'; finish(false); animate(() => { }); };
@@ -2695,7 +2696,6 @@ Q.hanzi = {
         },
       });
     };
-    peek.onclick = () => { const b = grid.classList.toggle('blur'); peek.textContent = b ? '看筆順提示' : '收起筆順提示'; };
     loadHanziWriter()
       .then(() => HanziWriter.loadCharacterData(ch))
       .then(data => {
