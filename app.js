@@ -2454,7 +2454,7 @@ function scratchPad(host) {
   w.className = 'pad';
   w.innerHTML = `<div class="pad-bar"><b>計算紙</b>
     <button class="mini pen on" data-c="#212529">黑筆</button><button class="mini pen" data-c="#e03131">紅筆</button><button class="mini pen" data-c="#1971c2">藍筆</button>
-    <button class="mini pen" data-er>橡皮擦</button><button class="mini" data-undo>上一步</button><button class="mini" data-clr>全部擦掉</button></div>
+    <button class="mini pen" data-er>橡皮擦</button><button class="mini" data-undo>上一步</button><button class="mini" data-clr>全部擦掉</button><button class="mini" data-big>紙張加大</button></div>
     <div class="pad-area"><canvas></canvas><div class="pad-eraser"></div></div>`;
   host.appendChild(w);
   const cv = $('canvas', w), ctx = cv.getContext('2d'), ring = $('.pad-eraser', w);
@@ -2497,6 +2497,11 @@ function scratchPad(host) {
   });
   $('[data-undo]', w).onclick = () => { strokes.pop(); redraw(); };
   $('[data-clr]', w).onclick = () => { strokes.length = 0; redraw(); };
+  $('[data-big]', w).onclick = e => {   // 紙張加大／縮小：寫過的字會保留
+    const big = w.classList.toggle('big');
+    e.target.textContent = big ? '紙張縮小' : '紙張加大';
+    fit();
+  };
   setTimeout(fit, 0);
   window.addEventListener('resize', fit);
   onLeave(() => window.removeEventListener('resize', fit));

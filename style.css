@@ -714,7 +714,7 @@ body {
 .pad-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: var(--purple-l); }
 .pad-bar b { color: #5f3dc4; margin-right: 4px; }
 .pad-bar .mini.on { background: #7048e8; border-color: #7048e8; color: #fff; }
-.pad canvas { display: block; width: 100%; height: 280px; touch-action: none; cursor: crosshair;
+.pad canvas { display: block; width: 100%; height: clamp(420px, 65vh, 620px); touch-action: none; cursor: crosshair;
   background-image: linear-gradient(#edf2ff 1px, transparent 1px), linear-gradient(90deg, #edf2ff 1px, transparent 1px); background-size: 24px 24px; }
 
 /* ---------- 程式編輯器 ---------- */
@@ -799,6 +799,7 @@ details.demo[open] > summary { border-bottom: 1px solid #c3fae8; }
 
 /* 計算紙的準心：用筆時是黑色實心小圓點，用橡皮擦時是空心黑色圓圈（大小和擦掉的範圍一樣） */
 .pad-area { position: relative; }
+.pad.big canvas { height: clamp(700px, 110vh, 1100px); }
 .pad canvas { cursor: none; }
 .pad-eraser { display: none; position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 50%; background: #000;
   box-shadow: 0 0 0 1.5px #fff; transform: translate(-50%, -50%); pointer-events: none; }
