@@ -2640,6 +2640,90 @@ function speakZh(text) {
 }
 const blankWord = (word, ch) => word.replace(ch, '＿');
 
+/* 寫生字的筆畫判定：自己判定每一筆，比 Hanzi Writer 內建的嚴格，而且會說出錯在哪裡
+   會檢查：方向（寫反）、筆順（寫成別的筆）、起筆位置、收筆位置、長短、形狀（轉折、鉤）
+   座標用漢字資料的座標：0～1024，y 向上（畫面上用 translate(0,900) scale(1,-1) 顯示） */
+const HZ = (() => {
+  const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const plen = p => { let s = 0; for (let i = 1; i < p.length; i++) s += d2(p[i - 1], p[i]); return s; };
+  /** 沿著筆畫平均取 n 個點，讓手寫的筆畫和標準筆畫可以一點一點比較 */
+  function resample(p, n = 32) {
+    if (p.length < 2 || !plen(p)) return Array.from({ length: n }, () => p[0].slice());
+    const step = plen(p) / (n - 1), out = [p[0].slice()];
+    let acc = 0, i = 1, prev = p[0];
+    while (out.length < n - 1 && i < p.length) {
+      const d = d2(prev, p[i]);
+      if (d > 0 && acc + d >= step) {
+        const t = (step - acc) / d, q = [prev[0] + t * (p[i][0] - prev[0]), prev[1] + t * (p[i][1] - prev[1])];
+        out.push(q); prev = q; acc = 0;
+      } else { acc += d; prev = p[i]; i++; }
+    }
+    while (out.length < n) out.push(p[p.length - 1].slice());
+    return out;
+  }
+  const DIRS = ['往右', '往右上', '往上', '往左上', '往左', '往左下', '往下', '往右下'];
+  /** 用文字說出一筆怎麼寫，例如「往右，再往下」「往左下」，有鉤的話會提醒 */
+  function describe(med) {
+    const r = resample(med, 17), segs = [];
+    for (let i = 1; i < r.length; i++) {
+      const vx = r[i][0] - r[i - 1][0], vy = r[i][1] - r[i - 1][1], l = Math.hypot(vx, vy);
+      if (!l) continue;
+      const b = ((Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) % 8) + 8) % 8;
+      if (segs.length && segs[segs.length - 1].b === b) segs[segs.length - 1].l += l; else segs.push({ b, l });
+    }
+    const tot = segs.reduce((s, x) => s + x.l, 0) || 1;
+    const names = [];
+    segs.filter(x => x.l >= tot * 0.15).forEach(x => { if (names[names.length - 1] !== DIRS[x.b]) names.push(DIRS[x.b]); });
+    // 鉤：筆畫最後一小段的方向，和筆畫主體（50%～80%）差 95 度以上（只看夠長的筆畫，避免把「點」的小彎當成鉤）
+    const q = resample(med, 41), ang = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]);
+    let turn = Math.abs(ang(q[37], q[40]) - ang(q[20], q[32])) * 180 / Math.PI;
+    if (turn > 180) turn = 360 - turn;
+    const hook = plen(med) >= 300 && turn > 95;
+    return (names.join('，再') || '照著箭頭寫') + (hook ? '，最後要鉤起來' : '');
+  }
+  /** 比較一筆手寫（u）和標準筆畫的中心線（med） */
+  function check(u, med, tol) {
+    const ml = plen(med), short = ml < 220;
+    const ru = resample(u), rm = resample(med), n = ru.length;
+    let f = 0, mx = 0;
+    for (let i = 0; i < n; i++) { const d = d2(ru[i], rm[i]); f += d; if (d > mx) mx = d; }
+    f /= n;
+    const st = d2(u[0], med[0]), en = d2(u[u.length - 1], med[med.length - 1]), ratio = plen(resample(u, 12)) / Math.max(plen(resample(med, 12)), 1);   // 用粗略的長度比較，手抖不會讓筆畫變「太長」
+    const T = { avg: (short ? 85 : 105) * tol, max: (short ? 150 : 210) * tol, st: (short ? 120 : 150) * tol, en: (short ? 130 : 170) * tol, lo: short ? 0.35 : 0.6, hi: short ? 2.6 : 1.6 };
+    const why = ratio < T.lo ? 'short' : ratio > T.hi ? 'long' : st > T.st ? 'start' : en > T.en ? 'end' : (f > T.avg || mx > T.max) ? 'shape' : '';
+    return { ok: !why, why, f, mx, st, en, ratio };
+  }
+  /** 判定第 k 筆：tol 越大越寬鬆（默寫時看不到字，稍微放寬位置） */
+  function judge(u, meds, k, tol = 1) {
+    const med = meds[k];
+    if (plen(u) < 12) {   // 只點一下：只有很短的「點」可以這樣寫
+      if (plen(med) < 220 && d2(u[0], med[Math.floor(med.length / 2)]) < 130 * tol) return { ok: true };
+      return { ok: false, why: 'tap' };
+    }
+    const r = check(u, med, tol);
+    if (r.ok) return r;
+    if (check(u.slice().reverse(), med, tol).ok) return { ok: false, why: 'back' };
+    for (let j = 0; j < meds.length; j++) if (j !== k && check(u, meds[j], tol).ok) return { ok: false, why: 'order', j };
+    return r;
+  }
+  /** 錯在哪裡（visual：畫面上有沒有顯示綠色起點和箭頭） */
+  function say(r, k, med, visual) {
+    const s = `第 ${k + 1} 筆`, how = describe(med), from = visual ? '從綠色圓點開始，' : '';
+    switch (r.why) {
+      case 'back': return `${s}的方向寫反了！要${from}${how}`;
+      case 'order': return `你寫的是第 ${r.j + 1} 筆，筆順不對喔！現在要先寫${s}`;
+      case 'short': return `${s}太短了，${visual ? '要寫到箭頭的地方' : '要寫長一點'}`;
+      case 'long': return `${s}寫太長了，${visual ? '到箭頭的地方就要停' : '要短一點'}`;
+      case 'start': return `${s}的起筆位置不對，${visual ? '要從綠色圓點的地方開始' : '想想看這一筆從哪裡開始'}`;
+      case 'end': return `${s}的收筆位置不對：${from}${how}`;
+      case 'tap': return `要按住，把${s}畫出來喔`;
+      default: return `${s}的形狀不太對：${from}${how}`;
+    }
+  }
+  return { judge, say, describe, plen, resample };
+})();
+let HZ_UID = 0;
+
 Q.hanzi = {
   label: '寫生字',
   render(el, q, done) {
@@ -2662,22 +2746,30 @@ Q.hanzi = {
     const pad = $('.hz-pad', el), msg = $('.hz-msg', el), go = $('[data-go]', el), replay = $('[data-replay]', el);
     const grid = $('.hz-grid', el), order = $('.hz-order', el), rounds = $('.hz-rounds', el);
     const showOrder = on => { order.hidden = !on; };   // 默寫時不顯示筆順步驟
-    let writer = null, step = 1, over = false, n = 0, gen = 0;
+    const size = Math.min(300, Math.max(230, window.innerWidth - 110));
+    const uid = 'hz' + (++HZ_UID);
+    // 寫字板：底下是淡淡的字（描紅用）、寫好的筆畫、筆順動畫、提示（綠色起點＋箭頭），最上面是正在寫的筆跡
+    pad.innerHTML = `<svg class="hz-svg" viewBox="0 0 1024 1024" width="${size}" height="${size}">
+      <defs><marker id="${uid}a" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2b8a3e"/></marker></defs>
+      <g transform="translate(0, 900) scale(1, -1)"><g class="hz-ol"></g><g class="hz-dn"></g><g class="hz-an"></g><g class="hz-hi"></g></g>
+      <polyline class="hz-ink" points="" fill="none" stroke="#e8590c" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const svg = $('svg', pad), OL = $('.hz-ol', pad), DN = $('.hz-dn', pad), AN = $('.hz-an', pad), HI = $('.hz-hi', pad), INK = $('.hz-ink', pad);
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    let data = null, n = 0, step = 1, over = false, gen = 0, mode = 'idle', k = 0, miss = 0, total = 0, round = 0, clipN = 0, pts = null;
     const mistakes = [];
     const setStep = s => { step = s; $$('[data-st]', el).forEach(x => x.classList.toggle('on', +x.dataset.st === s)); };
-    const size = Math.min(280, Math.max(220, window.innerWidth - 120));
-    const make = outline => {
-      pad.innerHTML = '';
-      writer = HanziWriter.create(pad, ch, {
-        width: size, height: size, padding: 12, showCharacter: false, showOutline: outline,
-        strokeColor: '#364fc7', outlineColor: '#d0d7f5', drawingColor: '#e8590c', drawingWidth: 22,
-        strokeAnimationSpeed: 1.1, delayBetweenStrokes: 250, highlightColor: '#40c057',
-      });
-      return writer;
+    const medPts = j => data.medians[j].map(p => p.join(',')).join(' ');
+    const showOutline = on => { OL.innerHTML = on ? data.strokes.map(s => `<path d="${s}" fill="#dde3fb"/>`).join('') : ''; };
+    const clearAll = () => { DN.innerHTML = AN.innerHTML = HI.innerHTML = ''; INK.setAttribute('points', ''); };
+    const addDone = j => DN.insertAdjacentHTML('beforeend', `<path d="${data.strokes[j]}" fill="#364fc7"/>`);
+    // 提示：綠色圓點＝起筆的地方；full 時再加上橘色的筆畫形狀和綠色箭頭（寫的方向）
+    const hint = (j, full) => {
+      const m = data.medians[j];
+      HI.innerHTML = `${full ? `<path d="${data.strokes[j]}" fill="#ffc078" opacity=".75"/><polyline points="${medPts(j)}" fill="none" stroke="#2b8a3e" stroke-width="14" stroke-dasharray="34 22" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#${uid}a)"/>` : ''}
+        <circle cx="${m[0][0]}" cy="${m[0][1]}" r="40" fill="#40c057" stroke="#fff" stroke-width="8"/>`;
     };
     // 筆順步驟圖：第 k 格畫出前 k 筆，第 k 筆用橘色
-    const buildGrid = data => {
-      n = data.strokes.length;
+    const buildGrid = () => {
       $('.hz-total', el).textContent = `（共 ${n} 筆）`;
       grid.innerHTML = data.strokes.map((_, k) => `<div class="hz-cell"><svg viewBox="0 0 1024 1024"><g transform="translate(0, 900) scale(1, -1)">${
         data.strokes.map((p, j) => `<path d="${p}" fill="${j < k ? '#495057' : j === k ? '#e8590c' : '#e9ecef'}"/>`).join('')}</g></svg><b>${k + 1}</b></div>`).join('');
@@ -2685,80 +2777,121 @@ Q.hanzi = {
     const mark = k => {   // k：正在寫第幾筆（從 0 開始）；k = n 代表寫完
       [...grid.children].forEach((c, i) => { c.classList.toggle('on', i === k); c.classList.toggle('done', i < k); });
       const c = grid.children[Math.min(k, n - 1)];
-      if (c && c.scrollIntoView) { const g = grid.getBoundingClientRect(), r = c.getBoundingClientRect(); if (r.top < g.top || r.bottom > g.bottom) grid.scrollTop += r.top - g.top - 10; }
+      if (c) { const g = grid.getBoundingClientRect(), r = c.getBoundingClientRect(); if (r.top < g.top || r.bottom > g.bottom) grid.scrollTop += r.top - g.top - 10; }
     };
     const markBad = k => { const c = grid.children[k]; if (c) { c.classList.add('bad'); setTimeout(() => c.classList.remove('bad'), 800); } };
     const finish = ok => {
-      if (over) return; over = true;
+      if (over) return; over = true; mode = 'idle';
       go.disabled = replay.disabled = true; $('[data-skip]', el).disabled = true;
       showOrder(true); mark(n);
       done(ok, rev);
     };
-    // 一筆一筆播放筆順，旁邊的數字同步亮起
-    const animate = then => {
-      setStep(1); make(true); showOrder(true);
-      const my = ++gen;
-      msg.textContent = '仔細看每一筆的順序，旁邊的數字會跟著亮起來';
-      writer.hideCharacter();
-      let k = 0;
-      const nextStroke = () => {
-        if (my !== gen || !el.isConnected) return;
-        if (k >= n) {
-          mark(n);
-          if (then) setTimeout(then, 600);
-          else msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。';
-          return;
-        }
-        mark(k);
-        writer.animateStroke(k, { onComplete: () => { k++; setTimeout(nextStroke, 300); } });
+    // 筆順動畫：沿著筆畫中心線，從起筆一路畫到收筆（看得出方向）
+    const animStroke = (j, my) => new Promise(res => {
+      const id = `${uid}c${++clipN}`, L = HZ.plen(data.medians[j]) + 160;
+      AN.innerHTML = `<clipPath id="${id}"><path d="${data.strokes[j]}"/></clipPath><polyline points="${medPts(j)}" clip-path="url(#${id})" fill="none" stroke="#364fc7" stroke-width="200" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${L}" stroke-dashoffset="${L}"/>`;
+      const line = $('polyline', AN), dur = Math.max(400, L * 1.2), t0 = performance.now();
+      const tick = t => {
+        if (my !== gen || !el.isConnected) return res(false);
+        const p = Math.min(1, (t - t0) / dur);
+        line.setAttribute('stroke-dashoffset', L * (1 - p));
+        if (p < 1) requestAnimationFrame(tick); else { AN.innerHTML = ''; addDone(j); res(true); }
       };
-      nextStroke();
+      requestAnimationFrame(tick);
+    });
+    const animate = async then => {
+      const my = ++gen; mode = 'anim'; setStep(1); showOrder(true); clearAll(); showOutline(true);
+      msg.textContent = '仔細看每一筆的順序和方向，旁邊的數字會跟著亮起來';
+      for (let j = 0; j < n; j++) {
+        mark(j);
+        if (!await animStroke(j, my)) return;
+        await wait(250);
+        if (my !== gen) return;
+      }
+      mark(n); mode = 'idle';
+      if (then) setTimeout(() => my === gen && then(), 600);
+      else msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。';
+    };
+    const startWrite = (m, r) => {
+      ++gen; mode = m; round = r || 0; k = 0; miss = 0; total = 0;
+      clearAll(); showOutline(m === 'trace'); mark(0);
+      if (m === 'trace') hint(0, false);
     };
     const trace = () => {
-      ++gen; setStep(2); make(true); showOrder(true); mark(0);
-      msg.textContent = '照著淡淡的字，看旁邊的筆順數字，一筆一筆寫';
+      setStep(2); showOrder(true); startWrite('trace');
+      msg.textContent = '照著淡淡的字一筆一筆寫：從綠色圓點開始，順序看旁邊的數字';
       go.textContent = '跳到默寫'; go.onclick = () => memory(1);
-      writer.quiz({
-        onMistake: d => { markBad(d.strokeNum); msg.textContent = `這一筆不對喔，現在要寫第 ${d.strokeNum + 1} 筆（看旁邊橘色的那一筆）`; },
-        onCorrectStroke: d => { mark(d.strokeNum + 1); msg.textContent = d.strokesRemaining ? `很好！接下來寫第 ${d.strokeNum + 2} 筆，還有 ${d.strokesRemaining} 筆` : '寫完了！'; },
-        onComplete: () => { sfx(true); msg.textContent = '描得很好！接下來不看字，默寫兩遍'; setTimeout(() => memory(1), 1000); },
-      });
     };
-    // 默寫（第 round 遍）：不顯示筆順步驟，完全靠自己記
-    const memory = round => {
-      ++gen; setStep(2 + round); make(false); mark(0);
-      showOrder(false);
-      msg.textContent = `默寫第${round === 1 ? '一' : '二'}遍：不看字，自己寫出來！錯兩次會給提示`;
+    // 默寫（第 r 遍）：不顯示筆順步驟和淡淡的字，完全靠自己記；同一筆錯兩次才給提示
+    const memory = r => {
+      setStep(2 + r); showOrder(false); startWrite('memory', r);
+      msg.textContent = `默寫第${r === 1 ? '一' : '二'}遍：不看字，自己寫出來！同一筆錯兩次會給提示`;
       go.textContent = '我寫不出來';
       go.onclick = () => { msg.textContent = '沒關係，再看一次筆順，把它記起來'; finish(false); animate(() => { }); };
-      writer.quiz({
-        showHintAfterMisses: 2,
-        onMistake: d => { markBad(d.strokeNum); msg.textContent = `第 ${d.strokeNum + 1} 筆不對，再想想看`; },
-        onCorrectStroke: d => { mark(d.strokeNum + 1); msg.textContent = d.strokesRemaining ? `對了！還有 ${d.strokesRemaining} 筆` : '寫完了！'; },
-        onComplete: s => {
-          mistakes[round - 1] = s.totalMistakes;
-          rounds.innerHTML = mistakes.map((m, i) => `<span class="${m <= 2 ? 'g' : 'r'}">默寫第${i ? '二' : '一'}遍：${m ? `錯 ${m} 筆` : '全對'}</span>`).join('');
-          if (round === 1) {
-            sfx(s.totalMistakes <= 2);
-            msg.textContent = s.totalMistakes <= 2 ? '第一遍寫對了！再默寫第二遍，加深印象' : `第一遍錯了 ${s.totalMistakes} 筆，第二遍再仔細寫一次`;
-            setTimeout(() => memory(2), 1300);
-          } else {
-            const ok = mistakes.every(m => m <= 2);
-            msg.textContent = ok ? '兩遍都寫對了，太棒了！' : '完成了！錯比較多的筆畫要再多練習幾次';
-            setTimeout(() => finish(ok), 800);
-          }
-        },
-      });
     };
+    const complete = () => {
+      const my = gen; mode = 'idle'; HI.innerHTML = '';
+      if (step === 2) {
+        sfx(true);
+        msg.textContent = total ? `描完了！（錯了 ${total} 次）接下來不看字，默寫兩遍` : '描得很好，一次都沒錯！接下來不看字，默寫兩遍';
+        setTimeout(() => my === gen && memory(1), 1300);
+        return;
+      }
+      mistakes[round - 1] = total;
+      rounds.innerHTML = mistakes.map((m, i) => `<span class="${m <= 2 ? 'g' : 'r'}">默寫第${i ? '二' : '一'}遍：${m ? `錯 ${m} 次` : '全對'}</span>`).join('');
+      if (round === 1) {
+        sfx(total <= 2);
+        msg.textContent = total <= 2 ? '第一遍寫對了！再默寫第二遍，加深印象' : `第一遍錯了 ${total} 次，第二遍再仔細寫一次`;
+        setTimeout(() => my === gen && memory(2), 1400);
+      } else {
+        const ok = mistakes.every(m => m <= 2);
+        msg.textContent = ok ? '兩遍都寫對了，太棒了！' : '完成了！錯比較多的筆畫要再多練習幾次';
+        setTimeout(() => finish(ok), 800);
+      }
+    };
+    // 寫完一筆：判定對錯，錯了說出原因並顯示提示
+    const onStroke = u => {
+      const r = HZ.judge(u, data.medians, k, mode === 'memory' ? 1.25 : 1);
+      if (r.ok) {
+        INK.setAttribute('points', ''); HI.innerHTML = ''; addDone(k); k++; miss = 0; mark(k);
+        if (k >= n) return complete();
+        if (mode === 'trace') hint(k, false);
+        msg.textContent = mode === 'trace' ? `很好！接下來寫第 ${k + 1} 筆（綠色圓點是起筆的地方）` : `對了！還有 ${n - k} 筆`;
+        return;
+      }
+      INK.setAttribute('stroke', '#e03131');
+      const my = gen; setTimeout(() => { if (my === gen && !pts) INK.setAttribute('points', ''); }, 700);
+      if (r.why !== 'tap') { miss++; total++; markBad(k); }
+      const visual = mode === 'trace' || miss >= 2;
+      if (visual) hint(k, true);
+      msg.innerHTML = `<span class="r">${esc(HZ.say(r, k, data.medians[k], visual))}</span>${mode === 'memory' && !visual && r.why !== 'tap' ? '（再錯一次會給提示）' : ''}`;
+    };
+    const toV = e => { const b = svg.getBoundingClientRect(); return [(e.clientX - b.left) / b.width * 1024, (e.clientY - b.top) / b.height * 1024]; };
+    const drawInk = () => INK.setAttribute('points', pts.map(p => p.join(',')).join(' '));
+    svg.addEventListener('pointerdown', e => {
+      if (mode !== 'trace' && mode !== 'memory') return;
+      e.preventDefault();
+      try { svg.setPointerCapture(e.pointerId); } catch (_) { }
+      INK.setAttribute('stroke', '#e8590c'); pts = [toV(e)]; drawInk();
+    });
+    svg.addEventListener('pointermove', e => {
+      if (!pts) return;
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+      (evs.length ? evs : [e]).forEach(x => pts.push(toV(x)));
+      drawInk();
+    });
+    svg.addEventListener('pointerup', () => { if (!pts) return; const u = pts.map(([x, y]) => [x, 900 - y]); pts = null; onStroke(u); });
+    svg.addEventListener('pointercancel', () => { pts = null; INK.setAttribute('points', ''); });
     loadHanziWriter()
       .then(() => HanziWriter.loadCharacterData(ch))
-      .then(data => {
+      .then(d => {
         if (!el.isConnected) return;
-        buildGrid(data);
+        data = d; n = d.strokes.length;
+        buildGrid();
         animate();
         go.onclick = trace;
         replay.onclick = () => {
-          if (!writer || over) return;
+          if (!data || over) return;
           const was = step;
           animate(() => { if (was === 2) trace(); else if (was === 3) memory(1); else if (was === 4) memory(2); else msg.textContent = '看懂了嗎？按「開始描紅」照著淡淡的字寫一次。'; });
         };
