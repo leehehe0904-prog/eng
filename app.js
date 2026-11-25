@@ -2443,7 +2443,22 @@ Q.mcq = {
   render(el, q, done) {
     const it = q.item;
     el.innerHTML = `<div class="mcq-q">${esc(it.q).replace(/\n/g, '<br>')}</div>${it.hints && it.hints.length ? '<div class="hl"></div>' : ''}${optButtons(it.opts.map((o, i) => `<b>${ABC[i]}.</b> ${esc(o)}`), 'text-opts two')}`;
-    bindOpts(el, it.a, done, { head: '正確答案：', en: it.opts[it.a], zh: it.ex ? '解析：' + it.ex : '', say: false });
+    // 化學：每一題都有 YouTube 教學影片。作答前可以先看（收起來），作答後自動打開，變成「解析影片」
+    let vbox = null;
+    if (it.video) {
+      vbox = document.createElement('details');
+      vbox.className = 'vid-box';
+      vbox.innerHTML = `<summary>先看教學影片：${esc(it.video.title)}</summary><div class="vid-slot"></div>`;
+      vbox.addEventListener('toggle', () => { if (vbox.open && !vbox.dataset.on) { vbox.dataset.on = 1; $('.vid-slot', vbox).innerHTML = ytVideo(it.video); } });
+    }
+    const afterPick = () => {
+      if (!vbox) return;
+      $('summary', vbox).textContent = `解析影片：看影片把這個觀念弄懂（${it.video.title}）`;
+      vbox.classList.add('answered');
+      vbox.open = true;
+    };
+    bindOpts(el, it.a, done, { head: '正確答案：', en: it.opts[it.a], zh: it.ex ? '解析：' + it.ex : '', say: false }, afterPick);
+    if (vbox) el.appendChild(vbox);
     if (it.hints && it.hints.length) hintLadder(el, it.hints.map(h => () => esc(h)));   // 數學：一步一步的解題提示
     if (q.pad) scratchPad(el);   // 數學：底下有計算紙
     if (it.demo) {                // 程式：底下有教學影片（程式一步一步執行）
@@ -2455,6 +2470,14 @@ Q.mcq = {
     }
   },
 };
+/** YouTube 教學影片（嵌在網頁裡播放；學校網路擋住時，可以按連結到 YouTube 看） */
+function ytVideo(v) {
+  if (!v || !v.id) return '';
+  const id = encodeURIComponent(v.id);
+  return `<div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1" title="${esc(v.title)}" loading="lazy"
+      allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    <div class="yt-cap"><span>${esc(v.title)}${v.ch ? `・${esc(v.ch)}` : ''}</span><a href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener">影片播不出來？到 YouTube 看</a></div>`;
+}
 /** 計算紙：用手指、觸控筆或滑鼠在上面算 */
 function scratchPad(host) {
   const w = document.createElement('div');
@@ -2536,6 +2559,7 @@ function subjectQuestions(subj, lvl, n = 10) {
     const [q, o, a, ex] = item;
     const m = mkMcq(q, o[a], o.filter((_, i) => i !== a), ex);
     if (subj === 'code' && typeof CODE_DEMO !== 'undefined') m.item.demo = (CODE_DEMO[lvl] || [])[MCQ.code[lvl].indexOf(item)];
+    if (item[4] && typeof CHEM_VIDEOS !== 'undefined') m.item.video = CHEM_VIDEOS[item[4]];   // 化學：解析影片
     return m;
   });
 }
@@ -2557,13 +2581,14 @@ function subjectHome(id) {
   const me = currentProfile();
   const stage = (me && me.stage) || store.get('level', 'elem');
   const myBanks = me && me.school ? banksFor(me.school).filter(b => b.subject === id) : [];
+  const LV = SUBJECT_LEVELS.filter(l => !S.levels || S.levels.includes(l.id));   // 有些科目只有部分程度（例如化學）
   view(`${bar(S.name)}
     <div class="grade-head" style="--c:${S.color}"><div><h2>${S.name}</h2><p>${S.desc}${id === 'math' ? '・每次都是新題目' : '・每次 10 題，做過的題目會最後才再出現'}</p></div></div>
     ${id === 'code' ? `<button class="k-banner" data-lab style="--c:#087f5b"><span><b>程式編輯器</b><small>自己寫 Python 或 JavaScript，按下執行馬上看到結果；附範例程式</small></span><span class="go">開始寫程式 →</span></button>
       <button class="k-banner" data-guide style="--c:#1971c2"><span><b>Python 完整教學</b><small>${CODE_GUIDE.length} 章：輸出與 \\n 跳脫字元、變數、字串、迴圈、串列、字典、函式、錯誤處理、類別…每章都能直接執行</small></span><span class="go">從頭學 →</span></button>` : ''}
-    <button class="k-banner" data-know style="--c:${S.color}"><span><b>${S.name}重點整理（知識庫）</b><small>先讀懂重點，再來做題目：${(SUBJECT_LEVELS.map(l => (KNOWLEDGE[id] || {})[l.id] || []).flat()).length} 個主題，可以搜尋${id === 'sci' ? '、有圖解' : ''}</small></span><span class="go">讀重點 →</span></button>
+    <button class="k-banner" data-know style="--c:${S.color}"><span><b>${S.name}重點整理（知識庫）</b><small>先讀懂重點，再來做題目：${(SUBJECT_LEVELS.map(l => (KNOWLEDGE[id] || {})[l.id] || []).flat()).length} 個主題，可以搜尋${id === 'sci' ? '、有圖解' : id === 'chem' ? '、每個重點都有教學影片' : ''}</small></span><span class="go">讀重點 →</span></button>
     <h3 class="sec">選擇程度，直接開始</h3>
-    <div class="grades">${SUBJECT_LEVELS.map(l => { const b = bestOf(`${id}-${l.id}`); return `<button class="grade" style="--c:${S.color}" data-l="${l.id}"><span class="gi sm">${l.badge}</span><b>${l.name}</b><small>${l.sub}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${l.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
+    <div class="grades">${LV.map(l => { const b = bestOf(`${id}-${l.id}`); return `<button class="grade" style="--c:${S.color}" data-l="${l.id}"><span class="gi sm">${l.badge}</span><b>${l.name}</b><small>${l.sub}</small>${starsHtml(starsOf(b || 0))}<span class="gs">${l.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>
     ${id === 'zh' ? `<h3 class="sec">寫生字（看筆順・描紅・默寫）</h3>
       <div class="grades">${Object.keys(HANZI).map(lv => { const L = SUBJECT_LEVELS.find(l => l.id === lv), b = bestOf('zhw-' + lv); return `<button class="grade hzw" style="--c:#e64980" data-w="${lv}"><span class="gi">${HANZI[lv][0][0]}</span><b>${L.name}</b><small>${HANZI[lv].length} 個生字</small>${starsHtml(starsOf(b || 0))}<span class="gs">${L.stage === stage ? '適合你' : b == null ? '開始' : `最高 ${b} 分`}</span></button>`; }).join('')}</div>` : ''}
     ${me && me.school ? `<h3 class="sec">我的學校題庫・${esc(me.school.replace(/（.*$/, ''))}</h3>
@@ -2767,11 +2792,12 @@ function knowledgePage(subj, lvl, back, q = '') {
   const figs = typeof KFIGS !== 'undefined' ? KFIGS : {};
   view(`${bar(`${S.name}・重點整理`)}
     <div class="card k-top">
-      <input class="type-in k-search" placeholder="搜尋重點，例如：${subj === 'math' ? '面積' : subj === 'sci' ? '光合作用' : subj === 'soc' ? '颱風' : subj === 'en' ? '過去式' : '成語'}" value="${esc(q)}">
+      <input class="type-in k-search" placeholder="搜尋重點，例如：${subj === 'math' ? '面積' : subj === 'sci' ? '光合作用' : subj === 'soc' ? '颱風' : subj === 'en' ? '過去式' : subj === 'chem' ? '莫耳' : subj === 'code' ? '迴圈' : '成語'}" value="${esc(q)}">
       ${kw ? `<p class="note-s">找到 ${list.length} 個相關重點</p>` : `<div class="k-levels">${levels.map(l => `<button class="lv-chip ${l.id === lvl ? 'on' : ''}" data-kl="${l.id}">${l.name}</button>`).join('')}</div>`}
     </div>
     ${list.map(t => `<details class="card k-topic" ${list.length <= 3 || kw ? 'open' : ''}>
       <summary><span class="k-badge">${SUBJECT_LEVELS.find(l => l.id === t.lv).badge}</span> ${esc(t.t)}</summary>
+      ${t.video && typeof CHEM_VIDEOS !== 'undefined' && CHEM_VIDEOS[t.video] ? `<div class="k-vid" data-vid="${esc(t.video)}"><b>教學影片</b><div class="vid-slot"></div></div>` : ''}
       ${[].concat(t.fig || []).filter(f => figs[f]).map(f => `<figure class="k-fig">${figs[f].svg}<figcaption>${esc(figs[f].cap)}</figcaption></figure>`).join('')}
       <ul class="k-points">${t.p.map(x => `<li>${kText(x)}</li>`).join('')}</ul>
       ${t.ex ? `<div class="k-ex"><b>${subj === 'math' ? '例題' : '例子'}</b>${t.ex.map(x => `<div>${subj === 'en' ? sayMini(x) + ' ' : ''}${esc(x)}</div>`).join('')}</div>` : ''}
@@ -2779,6 +2805,9 @@ function knowledgePage(subj, lvl, back, q = '') {
       ${t.tip ? `<div class="k-tip">記憶小撇步：${kText(t.tip)}</div>` : ''}
       <div class="row">${t.code ? `<button class="btn" data-code="${t.lv}|${t.i}">在編輯器試試</button>` : ''}<button class="btn primary" data-kq="${t.lv}">做${SUBJECT_LEVELS.find(l => l.id === t.lv).name}練習題</button><button class="btn ghost" data-ka="${esc(t.t)}">看不懂？問 AI 老師</button></div>
     </details>`).join('') || '<div class="card center"><p>沒有找到相關的重點，換個關鍵字試試看。</p></div>'}`, back);
+  // 影片等打開那個重點時才載入，避免一次載入很多部影片
+  const loadVid = d => { const k = $('.k-vid', d); if (d.open && k && !k.dataset.on) { k.dataset.on = 1; $('.vid-slot', k).innerHTML = ytVideo(CHEM_VIDEOS[k.dataset.vid]); } };
+  $$('.k-topic').forEach(d => { d.addEventListener('toggle', () => loadVid(d)); loadVid(d); });
   const inp = $('.k-search');
   let timer = null;
   inp.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = inp.value; knowledgePage(subj, lvl, back, v); const n = $('.k-search'); n.focus(); n.setSelectionRange(v.length, v.length); }, 350); };
