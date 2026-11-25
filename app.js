@@ -1051,10 +1051,168 @@ function buildQs(o) {
   return qs;
 }
 
+/* =========================================================
+   學習紀錄：連續天數、今日目標、成就徽章、錯題本、繼續上次
+   （存在這台電腦，每個登入的人各自一份）
+   ========================================================= */
+const DAY_GOAL = 20;   // 一天答 20 題就達成今日目標
+const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dayDiff = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+const BADGES = [
+  { id: 'r1', name: '第一步', desc: '完成第一回合練習', ok: p => p.tot.rounds >= 1 },
+  { id: 'goal', name: '今日達標', desc: `一天答 ${DAY_GOAL} 題`, ok: p => Object.values(p.days).some(d => d.q >= DAY_GOAL) },
+  { id: 'perfect', name: '滿分', desc: '有一回合全部答對', ok: p => p.tot.perfect >= 1 },
+  { id: 's3', name: '連續 3 天', desc: '連續 3 天都有練習', ok: p => p.best >= 3 },
+  { id: 's7', name: '一週不間斷', desc: '連續 7 天都有練習', ok: p => p.best >= 7 },
+  { id: 's30', name: '一個月不間斷', desc: '連續 30 天都有練習', ok: p => p.best >= 30 },
+  { id: 'q100', name: '答對 100 題', desc: '累計答對 100 題', ok: p => p.tot.ok >= 100 },
+  { id: 'q500', name: '答對 500 題', desc: '累計答對 500 題', ok: p => p.tot.ok >= 500 },
+  { id: 'q1000', name: '答對 1000 題', desc: '累計答對 1000 題', ok: p => p.tot.ok >= 1000 },
+  { id: 'hz20', name: '寫字小達人', desc: '寫對 20 個生字', ok: p => p.tot.hz >= 20 },
+  { id: 'fix10', name: '錯題剋星', desc: '在錯題本改正 10 題', ok: p => p.tot.fixed >= 10 },
+  { id: 'multi', name: '十項全能', desc: '在 5 個不同科目完成練習', ok: p => (p.subj || []).length >= 5 },
+];
+const Prog = {
+  get() {
+    const p = store.get('prog', null) || {};
+    return { days: {}, streak: 0, best: 0, last: '', badges: [], subj: [], ...p, tot: { q: 0, ok: 0, rounds: 0, perfect: 0, hz: 0, fixed: 0, ...(p.tot || {}) } };
+  },
+  save(p) { store.set('prog', p); },
+  /** 現在的連續天數（昨天或今天有練習才算還在連續） */
+  streak(p = this.get()) { return p.last && dayDiff(p.last, dayKey()) <= 1 ? p.streak : 0; },
+  todayQ(p = this.get()) { return (p.days[dayKey()] || {}).q || 0; },
+  answer(ok, type) {
+    const p = this.get(), t = dayKey(), d = p.days[t] || (p.days[t] = { q: 0, ok: 0 });
+    d.q++; p.tot.q++;
+    if (ok) { d.ok++; p.tot.ok++; if (type === 'hanzi') p.tot.hz++; }
+    if (p.last !== t) { p.streak = p.last && dayDiff(p.last, t) === 1 ? p.streak + 1 : 1; p.last = t; p.best = Math.max(p.best || 0, p.streak); }
+    const ks = Object.keys(p.days).sort();
+    while (ks.length > 60) delete p.days[ks.shift()];   // 只留最近 60 天
+    this.save(p);
+  },
+  round(pct, subj) {
+    const p = this.get();
+    p.tot.rounds++;
+    if (pct === 100) p.tot.perfect++;
+    if (subj && !p.subj.includes(subj)) p.subj.push(subj);
+    const t = dayKey();
+    if (!p.todaySubj || p.todaySubj.d !== t) p.todaySubj = { d: t, s: [] };
+    if (subj && !p.todaySubj.s.includes(subj)) p.todaySubj.s.push(subj);
+    this.save(p);
+    return this.newBadges();
+  },
+  newBadges() {
+    const p = this.get(), got = BADGES.filter(b => !p.badges.includes(b.id) && b.ok(p));
+    if (got.length) { p.badges.push(...got.map(b => b.id)); this.save(p); }
+    return got;
+  },
+};
+const badgeHtml = (b, on = true) => `<span class="badge-m ${on ? '' : 'off'}" title="${esc(b.desc)}"><i>${esc(b.name.replace(/\s/g, '').slice(0, 2))}</i><b>${esc(b.name)}</b></span>`;
+
+/* ---------- 錯題本：答錯的題目會存起來，複習時連續答對 2 次就畢業 ---------- */
+const WRONG_TYPES = new Set(['mcq', 'hanzi', 'listen', 'pic2word', 'listenSpell', 'typeWord', 'missingLetter', 'spellBlocks', 'fillSentence', 'sentenceBlocks', 'listenBlocks', 'listenSentenceZh']);
+const Wrong = {
+  list() { return store.get('wrongbook', []); },
+  add(q, from) {
+    if (!WRONG_TYPES.has(q.type)) return;
+    let c;
+    try { c = JSON.parse(JSON.stringify(q)); } catch (e) { return; }
+    const k = hashKey(JSON.stringify(c.item || c));
+    const l = this.list().filter(x => x.k !== k);
+    l.unshift({ k, q: c, from, n: 0 });
+    store.set('wrongbook', l.slice(0, 200));
+  },
+  /** 複習時答題：連續答對 2 次就從錯題本移除 */
+  hit(k, ok) {
+    const l = this.list(), x = l.find(y => y.k === k);
+    if (!x) return false;
+    let gone = false;
+    if (ok && ++x.n >= 2) { l.splice(l.indexOf(x), 1); gone = true; const p = Prog.get(); p.tot.fixed++; Prog.save(p); }
+    if (!ok) x.n = 0;
+    store.set('wrongbook', l);
+    return gone;
+  },
+  remove(k) { store.set('wrongbook', this.list().filter(x => x.k !== k)); },
+};
+/** 從存檔還原題目：有些題型用「同一個物件」判斷正確答案，要重新接回去 */
+function relinkQ(q) {
+  for (const key of ['a', 's']) {
+    const v = q[key];
+    if (v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(q.opts)) {
+      const m = q.opts.find(o => o && typeof o === 'object' && o.en === v.en);
+      if (m) q[key] = m;
+    }
+  }
+  return q;
+}
+function wrongBook(back) {
+  const l = Wrong.list();
+  const groups = {};
+  l.forEach(x => { (groups[x.from] = groups[x.from] || []).push(x); });
+  view(`${bar('錯題本')}
+    <div class="card wb-top">
+      <p>答錯的題目會自動收進這裡。複習時<b>連續答對 2 次</b>，那一題就畢業了！</p>
+      ${l.length ? `<div class="row center"><button class="btn primary big" data-go>開始複習（${Math.min(10, l.length)} 題）</button></div>` : '<p class="center dim">目前沒有錯題，太棒了！去練習新的題目吧。</p>'}
+    </div>
+    ${Object.entries(groups).map(([from, xs]) => `<div class="card wb-group"><h4>${esc(from)}・${xs.length} 題</h4><ul>${xs.map(x => `<li><span>${esc(wrongLabel(x.q))}</span>${x.n ? '<small class="g">已答對 1 次</small>' : ''}<button class="mini" data-del="${x.k}" title="移除">移除</button></li>`).join('')}</ul></div>`).join('')}`, back);
+  const go = $('[data-go]');
+  if (go) go.onclick = () => reviewWrong(back);
+  $$('[data-del]').forEach(b => b.onclick = () => { Wrong.remove(b.dataset.del); wrongBook(back); });
+}
+const wrongLabel = q => {
+  const it = q.item;
+  if (q.type === 'mcq' && it) return it.q.replace(/\n/g, ' ').slice(0, 60);
+  if (q.type === 'hanzi' && it) return `寫生字：${it[0]}（${it[2]}）`;
+  const w = q.a || q.s || q.w || {};
+  return [w.en, w.zh].filter(Boolean).join('　') || Q[q.type]?.label || '題目';
+};
+function reviewWrong(back) {
+  const build = () => shuffle(Wrong.list()).slice(0, 10).map(x => ({ ...relinkQ(JSON.parse(JSON.stringify(x.q))), _wk: x.k }));
+  const qs = build();
+  if (!qs.length) return wrongBook(back);
+  runQuiz({ title: '錯題複習', questions: qs, rebuild: build, review: true, againText: '再複習 10 題', menuText: '回錯題本', back: () => wrongBook(back) });
+}
+
+/* ---------- 繼續上次 ---------- */
+function resumeLast() {
+  const r = store.get('lastQuiz', null);
+  if (!r || !r.r) return false;
+  const [k, a, b] = r.r;
+  if (k === 'subj' && SUBJECTS.some(s => s.id === a)) { subjectQuiz(a, b); return true; }
+  if (k === 'hz' && HANZI[a]) { hanziQuiz(a, () => subjectHome('zh')); return true; }
+  if (k === 'grade' && GRADES[a]) { gradeView(a); return true; }
+  return false;
+}
+/** 依照年齡／學習階段推薦今天的練習 */
+function suggestQuiz() {
+  const me = currentProfile() || {};
+  const age = +me.age || 0, stage = me.stage || store.get('level', 'elem');
+  const lv = stage === 'jh' ? 'jh' : stage === 'sh' || stage === 'uni' ? 'sh' : age && age <= 8 ? 'e1' : age && age <= 10 ? 'e2' : 'e3';
+  const subs = ['zh', 'soc', 'sci', 'math', ...(lv === 'e1' || lv === 'e2' ? [] : ['chem'])].filter(id => SUBJECTS.some(s => s.id === id));
+  // 先挑今天還沒練過的科目
+  const p = Prog.get(), done = (p.todaySubj && p.todaySubj.d === dayKey()) ? p.todaySubj.s : [];
+  const pool = subs.filter(s => !done.includes(s));
+  const id = pick(pool.length ? pool : subs);
+  return { id, lv: (SUBJECTS.find(s => s.id === id).levels || [lv]).includes(lv) ? lv : SUBJECTS.find(s => s.id === id).levels[0] };
+}
+
+/* ---------- 選擇題可以按數字鍵 1～4 作答，Enter 到下一題 ---------- */
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  const n = +e.key;
+  if (n >= 1 && n <= 9) {
+    const b = $$('.qbody .options .opt')[n - 1];
+    if (b && !b.disabled) { e.preventDefault(); b.click(); }
+  }
+});
+
 function runQuiz(o) {
   const qs = o.questions ? o.questions : buildQs(o);
   if (!qs.length) { toast('題目不夠，換一個練習吧！'); o.back(); return; }
-  let i = 0, score = 0;
+  if (o.resume) store.set('lastQuiz', { r: o.resume, title: o.title });   // 首頁的「繼續上次」
+  let i = 0, score = 0, graduated = 0, reviewOk = 0;
   const wrong = [], sec = {};
   next();
 
@@ -1071,6 +1229,9 @@ function runQuiz(o) {
       answered = true;
       if (q.sec) { sec[q.sec] = sec[q.sec] || { ok: 0, n: 0 }; sec[q.sec].n++; if (ok) sec[q.sec].ok++; }
       if (ok) score++; else wrong.push(rev);
+      Prog.answer(ok, q.type);                                   // 今日目標、連續天數
+      if (o.review && q._wk) { if (ok) reviewOk++; if (Wrong.hit(q._wk, ok)) graduated++; }   // 錯題複習
+      else if (!ok) Wrong.add(q, o.title);                        // 答錯的題目收進錯題本
       sfx(ok);
       $('.sc').textContent = '★ ' + score;
       const foot = $('.qfoot');
@@ -1102,15 +1263,29 @@ function runQuiz(o) {
         <p class="pass ${pass ? 'ok' : 'bad'}">${pass ? '以這次成績估算，可以通過英檢初級初試！繼續保持！' : '還差一點！通過標準：總分 160 以上，且聽力、閱讀都要 72 分以上。'}</p>`;
     }
     const msg = st === 3 ? '太厲害了！' : st === 2 ? '做得很好！' : st === 1 ? '不錯喔，再加油！' : '多練習幾次就會進步！';
+    // 學習紀錄：今日目標、連續天數、新徽章、錯題本
+    const before = Prog.todayQ() - qs.length;
+    const fresh = Prog.round(pct, o.subj);
+    const P = Prog.get(), tq = Prog.todayQ(P), stk = Prog.streak(P), wn = Wrong.list().length;
+    const goalNow = tq >= DAY_GOAL && before < DAY_GOAL;
+    const todayBox = `<div class="today-box">
+        <div class="tb-line"><span>今日目標</span><div class="tb-bar"><i style="width:${Math.min(100, tq / DAY_GOAL * 100)}%"></i></div><b>${Math.min(tq, DAY_GOAL)} / ${DAY_GOAL} 題</b></div>
+        <p>${goalNow ? '今日目標達成！明天再來，連續天數會繼續增加' : tq >= DAY_GOAL ? `今天已經答了 ${tq} 題，超認真！` : `再答 ${DAY_GOAL - tq} 題就達成今日目標`}・<b class="streak-n">連續 ${stk} 天</b></p>
+        ${o.review ? `<p>錯題複習答對 <b>${reviewOk}</b> 題${graduated ? `，其中 <b>${graduated}</b> 題畢業了` : ''}${reviewOk - graduated > 0 ? `；${reviewOk - graduated} 題再答對一次就畢業` : ''}。${wn ? `錯題本還有 ${wn} 題` : '錯題本已經清空了！'}</p>` : ''}
+        ${fresh.length ? `<div class="new-badges"><b>獲得新徽章！</b>${fresh.map(b => badgeHtml(b)).join('')}</div>` : ''}
+      </div>`;
     view(`${bar(esc(o.title))}<div class="card result">
         <div class="big-stars">${'★'.repeat(st)}<span class="dim">${'★'.repeat(3 - st)}</span></div>
         <h2>${msg}</h2>
         <p class="score">答對 <b>${score}</b> / ${qs.length} 題（${pct} 分）</p>
+        ${todayBox}
         ${mock}
         ${wrong.filter(w => w.en).length ? `<h4>再複習一下：</h4><ul class="review">${wrong.filter(w => w.en).map(w => `<li>${w.say === false ? '' : sayMini(w.en)} <b>${esc(w.en)}</b> <span>${esc(w.zh || '')}</span></li>`).join('')}</ul>` : ''}
-        <div class="row center"><button class="btn primary" data-again>${o.againText || '再玩一次'}</button>${o.wordsOf ? '<button class="btn" data-words>單字表</button>' : ''}<button class="btn" data-menu>${o.menuText || '← 回選單'}</button></div>
+        <div class="row center"><button class="btn primary" data-again>${o.againText || '再玩一次'}</button>${!o.review && wn ? `<button class="btn" data-wrong>複習錯題（${wn}）</button>` : ''}${o.wordsOf ? '<button class="btn" data-words>單字表</button>' : ''}<button class="btn" data-menu>${o.menuText || '← 回選單'}</button></div>
       </div>`, o.back);
     $('[data-again]').onclick = () => runQuiz(o.rebuild ? { ...o, questions: o.rebuild() } : o);
+    const wb = $('[data-wrong]'); if (wb) wb.onclick = () => reviewWrong(o.back);
+    if (fresh.length || goalNow) { confetti(); if (st < 3) sfx(true); }
     $('[data-menu]').onclick = o.back;
     if (o.wordsOf) $('[data-words]').onclick = () => wordList(o.wordsOf, () => runQuiz(o.rebuild ? { ...o, questions: o.rebuild() } : o));
     if (st === 3) { confetti(); sfx(true); }
@@ -1179,6 +1354,7 @@ function gradeView(g) {
     dialogues: G.dialogues,
     n: 10,
     key: `${g}-all`,
+    resume: ['grade', g], subj: 'en',
     wordsOf: g,
     againText: '再來 10 題',
     menuText: g === 'gept' ? '← 回英檢' : '回首頁',
@@ -2566,14 +2742,50 @@ function subjectQuestions(subj, lvl, n = 10) {
 
 function subjectMenu() {
   const me = currentProfile();
+  // 今日學習：連續天數、今日目標、繼續上次、今日推薦、錯題本、徽章
+  const P = Prog.get(), stk = Prog.streak(P), tq = Prog.todayQ(P), wn = Wrong.list().length, last = store.get('lastQuiz', null);
+  const yesterday = P.last && dayDiff(P.last, dayKey()) === 1;
+  const sug = suggestQuiz(), S2 = SUBJECTS.find(s => s.id === sug.id), L2 = SUBJECT_LEVELS.find(l => l.id === sug.lv);
+  const nudge = tq >= DAY_GOAL ? '今天的目標已經達成了，太棒了！想多練習也可以喔'
+    : yesterday ? `昨天有練習！今天也來練習，就會連續 ${stk + 1} 天`
+    : tq ? `今天已經答了 ${tq} 題，再 ${DAY_GOAL - tq} 題就達成今日目標`
+    : P.tot.q ? `每天答 ${DAY_GOAL} 題，一點一點累積就會進步！` : `第一次來嗎？先挑一科做 10 題試試看！`;
+  const earned = BADGES.filter(b => P.badges.includes(b.id));
   view(`
     <section class="hero subj-hero">
       <div><h1>${me ? `嗨，${esc(me.name)}！` : '學習小冒險'} <span>今天想練習哪一科？</span></h1>
       <p>${me ? `${me.school ? esc(me.school.replace(/（.*$/, '')) + '・' : ''}${me.age ? me.age + ' 歲' : ''}` : '先按右上角「登入」設定名字、年齡和學校，題目會更適合你！'}</p></div>
     </section>
+    <section class="card dash">
+      <div class="dash-stats">
+        <div class="ds"><b>${stk}</b><small>連續天數</small></div>
+        <div class="ds"><div class="ring" style="--p:${Math.min(100, Math.round(tq / DAY_GOAL * 100))}"><span><b>${Math.min(tq, DAY_GOAL)}</b>/${DAY_GOAL}</span></div><small>今日目標（題）</small></div>
+        <div class="ds"><b>${P.tot.ok}</b><small>累計答對</small></div>
+      </div>
+      <p class="dash-nudge">${nudge}</p>
+      <div class="dash-acts">
+        ${last && last.r ? `<button class="btn primary" data-resume>繼續上次：${esc(last.title)}</button>` : ''}
+        <button class="btn ${last && last.r ? '' : 'primary'}" data-sug>今日推薦：${S2.name}・${L2.name}</button>
+        <button class="btn" data-wb>錯題本${wn ? `（${wn} 題）` : ''}</button>
+      </div>
+      <div class="badge-row">${earned.map(b => badgeHtml(b)).join('')}<button class="mini" data-badges>${earned.length ? `我的徽章 ${earned.length} / ${BADGES.length}` : `收集徽章 0 / ${BADGES.length}`}</button></div>
+    </section>
+    <h3 class="sec">選一科開始</h3>
     <div class="subjects">${SUBJECTS.map(s => `<button class="subj" style="--c:${s.color}" data-s="${s.id}"><span class="subj-mark">${s.mark}</span><b>${s.name}</b><small>${s.desc}</small></button>`).join('')}</div>
-    <p class="tip">每一科都有國小到高中的題目；學校老師也可以到「老師出題」建立自己學校的題庫。</p>`);
+    <p class="tip">每一科都有國小到高中的題目；答錯的題目會自動收進錯題本；學校老師也可以到「老師出題」建立自己學校的題庫。</p>`);
   $$('.subj').forEach(b => b.onclick = () => (b.dataset.s === 'en' ? home() : subjectHome(b.dataset.s)));
+  const rs = $('[data-resume]'); if (rs) rs.onclick = () => { if (!resumeLast()) { store.set('lastQuiz', null); subjectMenu(); } };
+  $('[data-sug]').onclick = () => subjectQuiz(sug.id, sug.lv, subjectMenu);
+  $('[data-wb]').onclick = () => wrongBook(subjectMenu);
+  $('[data-badges]').onclick = () => badgesPage(subjectMenu);
+}
+function badgesPage(back) {
+  const P = Prog.get();
+  view(`${bar('我的徽章')}
+    <div class="card"><p class="center">完成挑戰就能得到徽章，全部 ${BADGES.length} 個，你已經有 <b>${P.badges.length}</b> 個！</p>
+      <div class="badge-grid">${BADGES.map(b => `<div class="bg-item ${P.badges.includes(b.id) ? '' : 'off'}">${badgeHtml(b, P.badges.includes(b.id))}<small>${esc(b.desc)}</small></div>`).join('')}</div>
+      <p class="center dim">最長連續 ${P.best || 0} 天・累計答 ${P.tot.q} 題・寫對 ${P.tot.hz} 個生字・錯題改正 ${P.tot.fixed} 題</p>
+    </div>`, back);
 }
 
 function subjectHome(id) {
@@ -2607,7 +2819,7 @@ function subjectHome(id) {
 }
 function subjectQuiz(id, lvl, backTo) {
   const S = SUBJECTS.find(s => s.id === id), L = SUBJECT_LEVELS.find(l => l.id === lvl);
-  const o = { title: `${S.name}・${L.name}`, key: `${id}-${lvl}`, againText: '再來 10 題', menuText: `回${S.name}`, back: backTo || (() => subjectHome(id)) };
+  const o = { title: `${S.name}・${L.name}`, key: `${id}-${lvl}`, resume: ['subj', id, lvl], subj: id, againText: '再來 10 題', menuText: `回${S.name}`, back: backTo || (() => subjectHome(id)) };
   o.rebuild = () => subjectQuestions(id, lvl);
   runQuiz({ ...o, questions: o.rebuild() });
 }
@@ -2904,7 +3116,7 @@ Q.hanzi = {
 function hanziQuiz(level, back, list, title, key) {
   const src = list || HANZI[level];
   const L = SUBJECT_LEVELS.find(l => l.id === level);
-  const o = { title: title || `寫生字・${L ? L.name : ''}`, key: key || `zhw-${level}`, againText: '再寫 10 個字', menuText: '回國語', back };
+  const o = { title: title || `寫生字・${L ? L.name : ''}`, key: key || `zhw-${level}`, resume: list ? null : ['hz', level], subj: 'zh', againText: '再寫 10 個字', menuText: '回國語', back };
   o.rebuild = () => lruSample(src, Math.min(10, src.length), key || `zhw-${level}`).map(item => ({ type: 'hanzi', item }));
   runQuiz({ ...o, questions: o.rebuild() });
 }
