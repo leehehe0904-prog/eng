@@ -2731,7 +2731,14 @@ function subjectQuestions(subj, lvl, n = 10) {
     store.set('mathTypes', { ...store.get('mathTypes', {}), [key]: order.slice(0, Math.min(n, cnt)) });
     return out;
   }
-  return lruSample(MCQ[subj][lvl], n, `${subj}-${lvl}`).map(item => {
+  let items;
+  const mod = subj === 'soc' && window.SOC_MODERN ? SOC_MODERN[lvl] || [] : [];
+  if (mod.length) {
+    // 社會：每回合約 6 成是現代社會題（公民、生活、科技、經濟、環境），其餘從全部題目出
+    const inMod = new Set(mod), a = lruSample(mod, Math.min(mod.length, Math.ceil(n * 0.6)), `${subj}-${lvl}`);
+    items = shuffle([...a, ...lruSample(MCQ[subj][lvl].filter(x => !inMod.has(x)), n - a.length, `${subj}-${lvl}`)]);
+  } else items = lruSample(MCQ[subj][lvl], n, `${subj}-${lvl}`);
+  return items.map(item => {
     const [q, o, a, ex] = item;
     const m = mkMcq(q, o[a], o.filter((_, i) => i !== a), ex);
     if (subj === 'code' && typeof CODE_DEMO !== 'undefined') m.item.demo = (CODE_DEMO[lvl] || [])[MCQ.code[lvl].indexOf(item)];
